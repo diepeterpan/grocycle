@@ -1,0 +1,61 @@
+name: CI Quality & Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Lint, Test & Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            libsqlite3-dev \
+            sqlite3 \
+            clang-tidy \
+            clang-format
+
+      - name: Verify code formatting
+        run: |
+          cmake -B build
+          cmake --build build --target format-check
+
+      - name: Run static analysis (clang-tidy)
+        run: |
+          cmake --build build --target lint
+
+      - name: Compile Grocycle
+        run: |
+          # Seed build number from GitHub run number
+          echo "${{ github.run_number }}" > .build_number
+          cmake --build build -- -j$(nproc)
+
+      - name: Run test suite
+        run: |
+          cd build
+          ctest --output-on-failure
+
+      - name: Build distribution packages (.deb and .tar.gz)
+        run: |
+          cmake --build build --target package
+          mkdir -p artifacts
+          cp build/grocycle_*.deb artifacts/
+          cp build/grocycle_*.tar.gz artifacts/
+
+      - name: Upload workflow build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: grocycle-linux-amd64-build-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 14

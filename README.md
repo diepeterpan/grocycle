@@ -2,6 +2,8 @@
 
 > **Native Linux Directory Growth Monitor & Interactive TUI Explorer**
 
+[![CI](https://github.com/diepeterpan/grocycle/actions/workflows/ci.yml/badge.svg)](https://github.com/diepeterpan/grocycle/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/diepeterpan/grocycle?color=blue)](https://github.com/diepeterpan/grocycle/releases)
 [![Language](https://img.shields.io/badge/Language-C%2B%2B20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Platform](https://img.shields.io/badge/Platform-Linux-orange.svg)](https://www.kernel.org/)
 [![Database](https://img.shields.io/badge/Storage-SQLite%20WAL-lightgrey.svg)](https://www.sqlite.org/wal.html)
@@ -75,15 +77,15 @@ Grocycle is engineered specifically to avoid degrading system performance during
 
 ## Installation & Packaging
 
-Grocycle provides multiple installation options. Pre-built packages are generated in the `dist/` directory.
+Grocycle provides pre-built `.deb` and `.tar.gz` packages directly on the [**GitHub Releases**](https://github.com/diepeterpan/grocycle/releases) page for every release.
 
 ### Method 1: Debian / Ubuntu (`.deb` Package) — Recommended
 
-The native `.deb` package installs binaries, registers the systemd service, creates the required `/var/lib/grocycle` directory, and starts the service automatically:
+Download the latest `.deb` package from [Releases](https://github.com/diepeterpan/grocycle/releases) and install:
 
 ```bash
-# Install the Debian package
-sudo apt install ./dist/grocycle_1.0.0_amd64.deb
+# Install the Debian package (auto-starts daemon service)
+sudo apt install ./grocycle_*_amd64.deb
 
 # Verify the service is running
 grocycle service status
