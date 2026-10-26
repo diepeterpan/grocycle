@@ -2,6 +2,7 @@
 #include "common/utils.hpp"
 #include "db/storage_engine.hpp"
 #include "ipc/unix_socket.hpp"
+#include "web/web_server.hpp"
 #include <iostream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
@@ -292,6 +293,19 @@ int run_clean_command(const Config &cfg, bool force) {
             return 1;
         }
     }
+}
+
+int run_web_command(const Config &cfg, const std::string &config_file, uint16_t port, const std::string &host,
+                    const std::string &auth, bool open_browser, size_t max_clients) {
+    web::ServerOptions options;
+    options.port = port;
+    options.host = host;
+    options.auth = auth;
+    options.auto_open_browser = open_browser;
+    options.max_clients = max_clients;
+    options.config_path = config_file;
+
+    return web::run_web_server(cfg, options);
 }
 
 } // namespace grocycle::cli

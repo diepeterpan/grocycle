@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grocycle - Web Terminal</title>
+  <link rel="stylesheet" href="/xterm.css">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      height: 42px;
+      min-height: 42px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      user-select: none;
+      z-index: 10;
+    }
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-badge {
+      background: linear-gradient(135deg, #1f6feb, #238636);
+      color: #ffffff;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .brand-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f0f6fc;
+      letter-spacing: 0.2px;
+    }
+    .brand-subtitle {
+      font-size: 12px;
+      color: #8b949e;
+      display: none;
+    }
+    @media (min-width: 600px) {
+      .brand-subtitle { display: inline; }
+    }
+    .controls-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(46, 160, 67, 0.15);
+      color: #3fb950;
+      border: 1px solid rgba(46, 160, 67, 0.4);
+      transition: all 0.2s ease;
+    }
+    .status-pill.disconnected {
+      background: rgba(248, 81, 73, 0.15);
+      color: #f85149;
+      border-color: rgba(248, 81, 73, 0.4);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #30363d;
+      color: #f0f6fc;
+      border-color: #8b949e;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    #reconnect-btn {
+      display: none;
+      background: #238636;
+      border-color: #2ea043;
+      color: #ffffff;
+    }
+    #reconnect-btn:hover {
+      background: #2ea043;
+    }
+    #terminal-container {
+      flex: 1;
+      width: 100%;
+      height: calc(100% - 42px);
+      padding: 6px;
+      background: #0d1117;
+      position: relative;
+    }
+    .xterm {
+      height: 100%;
+      width: 100%;
+    }
+    .xterm-viewport::-webkit-scrollbar {
+      width: 8px;
+    }
+    .xterm-viewport::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand-section">
+      <span class="brand-badge">Grocycle</span>
+      <span class="brand-title">Directory Growth Explorer</span>
+      <span class="brand-subtitle">&bull; Interactive Terminal WebUI</span>
+    </div>
+    <div class="controls-section">
+      <div id="status-pill" class="status-pill">
+        <span class="status-dot"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+      <button id="reconnect-btn" class="btn" onclick="connect()">Reconnect</button>
+      <button id="fullscreen-btn" class="btn" onclick="toggleFullScreen()">Fullscreen</button>
+    </div>
+  </header>
+  <div id="terminal-container"></div>
+
+  <script src="/xterm.js"></script>
+  <script src="/xterm-addon-fit.js"></script>
+  <script>
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+      fontSize: 14,
+      lineHeight: 1.25,
+      letterSpacing: 0,
+      theme: {
+        background: '#0d1117',
+        foreground: '#e6edf3',
+        cursor: '#58a6ff',
+        selectionBackground: 'rgba(56, 139, 253, 0.4)',
+        black: '#484f58',
+        red: '#ff7b72',
+        green: '#3fb950',
+        yellow: '#d29922',
+        blue: '#58a6ff',
+        magenta: '#bc8cff',
+        cyan: '#39c5cf',
+        white: '#b1bac4',
+        brightBlack: '#6e7681',
+        brightRed: '#ffa198',
+        brightGreen: '#56d364',
+        brightYellow: '#e3b341',
+        brightBlue: '#79c0ff',
+        brightMagenta: '#d2a8ff',
+        brightCyan: '#56d4dd',
+        brightWhite: '#f0f6fc'
+      }
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    const container = document.getElementById('terminal-container');
+    term.open(container);
+    fitAddon.fit();
+
+    let socket = null;
+    const statusPill = document.getElementById('status-pill');
+    const statusText = document.getElementById('status-text');
+    const reconnectBtn = document.getElementById('reconnect-btn');
+
+    function updateStatus(connected, text) {
+      if (connected) {
+        statusPill.className = 'status-pill';
+        statusText.textContent = text || 'Connected';
+        reconnectBtn.style.display = 'none';
+      } else {
+        statusPill.className = 'status-pill disconnected';
+        statusText.textContent = text || 'Disconnected';
+        reconnectBtn.style.display = 'inline-flex';
+      }
+    }
+
+    function sendResize() {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        fitAddon.fit();
+        socket.send(JSON.stringify({
+          type: 'resize',
+          cols: term.cols,
+          rows: term.rows
+        }));
+      }
+    }
+
+    function connect() {
+      updateStatus(false, 'Connecting...');
+      if (socket) {
+        try { socket.close(); } catch (e) {}
+      }
+
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = protocol + '//' + location.host + '/ws';
+      socket = new WebSocket(wsUrl);
+      socket.binaryType = 'arraybuffer';
+
+      socket.onopen = () => {
+        updateStatus(true, 'Live Connected');
+        term.focus();
+        sendResize();
+      };
+
+      socket.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          term.write(event.data);
+        } else {
+          term.write(new Uint8Array(event.data));
+        }
+      };
+
+      socket.onclose = () => {
+        updateStatus(false, 'Session Closed');
+      };
+
+      socket.onerror = () => {
+        updateStatus(false, 'Connection Error');
+      };
+    }
+
+    term.onData((data) => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(data);
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      sendResize();
+    });
+
+    // Auto-refit after initial font load
+    setTimeout(() => {
+      fitAddon.fit();
+      sendResize();
+    }, 250);
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    connect();
+  </script>
+</body>
+</html>

@@ -91,11 +91,18 @@ target_link_libraries(grocycled PRIVATE
     CLI11::CLI11
 )
 
+find_library(UTIL_LIB util)
+
 # CLI and TUI executable: grocycle
 add_executable(grocycle
     src/cli/main_cli.cpp
     src/cli/cli_commands.cpp
     src/cli/tui_app.cpp
+    src/web/sha1.cpp
+    src/web/base64.cpp
+    src/web/pty_session.cpp
+    src/web/embedded_assets.cpp
+    src/web/web_server.cpp
 )
 target_link_libraries(grocycle PRIVATE
     grocycle_core
@@ -103,6 +110,7 @@ target_link_libraries(grocycle PRIVATE
     ftxui::screen
     ftxui::dom
     ftxui::component
+    ${UTIL_LIB}
 )
 
 # Test executables
@@ -134,10 +142,15 @@ set(GROCYCLE_SOURCES
     src/cli/main_cli.cpp
     src/cli/cli_commands.cpp
     src/cli/tui_app.cpp
+    src/web/sha1.cpp
+    src/web/base64.cpp
+    src/web/pty_session.cpp
+    src/web/web_server.cpp
 )
 
 set(GROCYCLE_ALL_FILES
     ${GROCYCLE_SOURCES}
+    src/web/embedded_assets.cpp
     include/common/config.hpp
     include/common/utils.hpp
     include/db/storage_engine.hpp
@@ -146,6 +159,11 @@ set(GROCYCLE_ALL_FILES
     include/scanner/throttle.hpp
     include/cli/cli_commands.hpp
     include/tui/tui_app.hpp
+    include/web/sha1.hpp
+    include/web/base64.hpp
+    include/web/pty_session.hpp
+    include/web/embedded_assets.hpp
+    include/web/web_server.hpp
 )
 
 find_program(CLANG_TIDY_EXE NAMES clang-tidy-19 clang-tidy)

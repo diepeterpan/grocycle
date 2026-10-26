@@ -200,6 +200,37 @@ Viewing: /var/log | Snapshots: #12 -> #13 (4 entries)   Enter: Drilldown | Backs
 
 ---
 
+## Web Terminal UI (`grocycle web`)
+
+Grocycle includes an embedded, high-performance C++ web server and WebSocket gateway that streams the full interactive terminal UI directly to any modern browser. It requires **zero external runtime dependencies** and runs 100% offline with bundled assets.
+
+```bash
+# Start local web terminal on default port 8080
+grocycle web
+
+# Start on custom port and bind across local network
+grocycle web --port 9000 --host 0.0.0.0
+
+# Protect with HTTP Basic Authentication
+grocycle web -p 8080 -H 0.0.0.0 --auth admin:secret123
+
+# Launch server and immediately open in default browser
+grocycle web -p 8080 --browser
+```
+
+### Options:
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `-p, --port <port>` | TCP port to listen on (range: 1024–65535) | `8080` |
+| `-H, --host <ip>` | Network interface IP to bind | `127.0.0.1` |
+| `-a, --auth <user:pass>` | Optional HTTP Basic Auth credentials | *(None)* |
+| `-b, --browser` | Automatically launch default system browser (`xdg-open`) | *(Disabled)* |
+| `--max-clients <n>` | Maximum concurrent web terminal sessions (range: 1–50) | `5` |
+
+Each connected browser tab is assigned an isolated pseudoterminal (PTY) session, allowing multiple users or windows to explore storage metrics independently.
+
+---
+
 ## Headless CLI Guide (Scripting & Automation)
 
 ### 1. `grocycle top` — Query Top Growing Directories

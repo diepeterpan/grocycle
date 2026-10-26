@@ -18,7 +18,9 @@ echo -e "${CYAN}======================================================${NC}"
 # If running on host and Docker is available, run inside grocycle-dev container
 if [ ! -f /.dockerenv ] && command -v docker &>/dev/null; then
     echo -e "Running verification inside container 'grocycle-dev'..."
-    exec docker run --rm -v "$(pwd):/workspace" grocycle-dev ./scripts/verify.sh
+    trap 'docker run --rm -v "$(pwd):/workspace" grocycle-dev chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true' EXIT
+    docker run --rm -v "$(pwd):/workspace" grocycle-dev ./scripts/verify.sh
+    exit $?
 fi
 
 echo -e "\n${CYAN}[1/5] Auto-formatting code (clang-format)...${NC}"

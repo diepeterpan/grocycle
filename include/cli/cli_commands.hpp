@@ -15,4 +15,7 @@ int run_config_command(Config &cfg, const std::string &config_file, const std::s
 
 int run_clean_command(const Config &cfg, bool force);
 
+int run_web_command(const Config &cfg, const std::string &config_file, uint16_t port, const std::string &host,
+                    const std::string &auth, bool open_browser, size_t max_clients);
+
 } // namespace grocycle::cli

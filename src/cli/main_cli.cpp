@@ -78,6 +78,31 @@ int main(int argc, char **argv) {
         "tui",
         "Launch the interactive full-color terminal drill-down explorer (default when no subcommand is specified)");
 
+    // 6. web
+    auto web_sub = app.add_subcommand(
+        "web", "Start the embedded web server and launch Grocycle interactive terminal UI in a web browser\n"
+               "  Examples:\n"
+               "    grocycle web\n"
+               "    grocycle web --port 8080\n"
+               "    grocycle web --port 9000 --host 0.0.0.0\n"
+               "    grocycle web --auth admin:secret123 --browser");
+    uint16_t web_port = 8080;
+    std::string web_host = "127.0.0.1";
+    std::string web_auth = "";
+    bool open_browser = false;
+    size_t max_clients = 5;
+
+    web_sub->add_option("-p,--port", web_port, "TCP port to listen on (range: 1024-65535)")
+        ->default_val(8080)
+        ->check(CLI::Range(1024, 65535));
+    web_sub->add_option("-H,--host", web_host, "Interface host/IP to bind to (default: 127.0.0.1)")
+        ->default_str("127.0.0.1");
+    web_sub->add_option("-a,--auth", web_auth, "Optional HTTP Basic Auth in 'username:password' format");
+    web_sub->add_flag("-b,--browser", open_browser, "Automatically launch default system browser");
+    web_sub->add_option("--max-clients", max_clients, "Maximum concurrent web terminal sessions (range: 1-50)")
+        ->default_val(5)
+        ->check(CLI::Range(1, 50));
+
     // Provide detailed footer in main help listing all subcommands and parameters
     app.footer("Subcommands & Value Ranges Reference:\n"
                "  grocycle top\n"
@@ -96,6 +121,12 @@ int main(int argc, char **argv) {
                "    -y, --yes, -f        Skip confirmation prompt and reset database immediately\n\n"
                "  grocycle tui\n"
                "    Launch interactive drill-down explorer with arrow/vim keys and color indicators\n\n"
+               "  grocycle web [options]\n"
+               "    -p, --port INT       TCP port to listen on (range: 1024-65535) [default: 8080]\n"
+               "    -H, --host TEXT      Interface IP to bind [default: 127.0.0.1]\n"
+               "    -a, --auth TEXT      HTTP Basic Auth credentials in 'username:password' format\n"
+               "    -b, --browser        Auto-open default system browser\n"
+               "    --max-clients INT    Maximum concurrent client sessions [default: 5]\n\n"
                "For help on a specific subcommand, run: grocycle <subcommand> --help\n");
 
     // Parse CLI arguments
@@ -117,6 +148,13 @@ int main(int argc, char **argv) {
     }
     if (clean_sub->parsed()) {
         return grocycle::cli::run_clean_command(cfg, force_clean);
+    }
+    if (web_sub->parsed()) {
+        return grocycle::cli::run_web_command(cfg, config_path, web_port, web_host, web_auth, open_browser,
+                                              max_clients);
+    }
+    if (tui_sub->parsed()) {
+        return grocycle::tui::launch_tui(cfg);
     }
 
     // Default: Interactive TUI
