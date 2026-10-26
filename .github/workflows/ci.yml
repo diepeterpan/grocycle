@@ -26,25 +26,28 @@ jobs:
             clang-tidy \
             clang-format
 
-      - name: Verify code formatting
+      - name: Configure CMake & Export Compile Commands
         run: |
-          cmake -B build
-          cmake --build build --target format-check
-
-      - name: Run static analysis (clang-tidy)
-        run: |
-          cmake --build build --target lint
-
-      - name: Compile Grocycle
-        run: |
-          # Seed build number from GitHub run number
           echo "${{ github.run_number }}" > .build_number
+          cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Verify Code Formatting
+        run: |
+          cmake --build build --target format
+          git diff --exit-code || (echo "Formatting differences found! Please run ./scripts/verify.sh before check-in." && exit 1)
+
+      - name: Compile Grocycle & Tests
+        run: |
           cmake --build build -- -j$(nproc)
 
-      - name: Run test suite
+      - name: Run Test Suite
         run: |
           cd build
           ctest --output-on-failure
+
+      - name: Run Static Analysis (clang-tidy)
+        run: |
+          cmake --build build --target lint
 
       - name: Build distribution packages (.deb and .tar.gz)
         run: |
