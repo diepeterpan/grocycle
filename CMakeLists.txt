@@ -148,7 +148,7 @@ set(GROCYCLE_ALL_FILES
     include/tui/tui_app.hpp
 )
 
-find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+find_program(CLANG_TIDY_EXE NAMES clang-tidy-19 clang-tidy)
 if(CLANG_TIDY_EXE)
     add_custom_target(lint
         COMMAND ${CLANG_TIDY_EXE}
@@ -162,7 +162,7 @@ if(CLANG_TIDY_EXE)
     add_dependencies(lint generate_version_header)
 endif()
 
-find_program(CLANG_FORMAT_EXE NAMES clang-format)
+find_program(CLANG_FORMAT_EXE NAMES clang-format-19 clang-format)
 if(CLANG_FORMAT_EXE)
     add_custom_target(format
         COMMAND ${CLANG_FORMAT_EXE} -i ${GROCYCLE_ALL_FILES}

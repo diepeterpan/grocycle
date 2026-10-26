@@ -23,8 +23,10 @@ jobs:
             cmake \
             libsqlite3-dev \
             sqlite3 \
-            clang-tidy \
-            clang-format
+            clang-tidy-19 \
+            clang-format-19
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-19 100
+          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-19 100
 
       - name: Configure CMake & Export Compile Commands
         run: |
