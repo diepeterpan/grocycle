@@ -140,6 +140,24 @@ docker run --rm -v $(pwd):/workspace grocycle-dev bash -c "cd build && make form
 
 ---
 
+### Developer & Maintainer Scripts
+
+Two helper scripts are provided in `scripts/` to streamline pre-checkin validation and releases:
+
+#### 1. Pre-Checkin Verification (`scripts/verify.sh`)
+Runs auto-formatting (`clang-format`), compilation, the unit test suite (`ctest`), static analysis (`clang-tidy`), and packaging tests. Automatically runs inside the `grocycle-dev` Docker container if Docker is present:
+```bash
+./scripts/verify.sh
+```
+
+#### 2. Interactive Release Helper (`scripts/release.sh`)
+Fetches tags, shows the top 5 most recent release tags, prompts for a new semantic version tag (e.g., `v1.0.1`), tags the commit, and pushes to `origin`. This triggers the GitHub Actions release workflow to publish distribution packages:
+```bash
+./scripts/release.sh
+```
+
+---
+
 ## Interactive Terminal UI (TUI) Explorer
 
 Launch the full-color interactive tree explorer:
