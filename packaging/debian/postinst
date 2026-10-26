@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create directories with secure permissions
+        mkdir -p /var/lib/grocycle
+        chmod 0750 /var/lib/grocycle
+        mkdir -p /etc/grocycle
+
+        # If config doesn't exist, create default
+        if [ ! -f /etc/grocycle/config.json ]; then
+            if [ -f /usr/share/grocycle/config.json.example ]; then
+                cp /usr/share/grocycle/config.json.example /etc/grocycle/config.json
+            fi
+        fi
+
+        # Reload systemd and enable/start service
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+            systemctl enable grocycle.service || true
+            systemctl restart grocycle.service || true
+        fi
+    ;;
+esac
+
+exit 0

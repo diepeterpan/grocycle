@@ -1,0 +1,34 @@
+# CMake & Build Artifacts
+build/
+bin/
+lib/
+CMakeUserPresets.json
+compile_commands.json
+*.o
+*.a
+*.so
+*.dylib
+
+# Packaging & Distribution Output (publish via GitHub Releases instead)
+dist/
+*.deb
+*.tar.gz
+*.rpm
+
+# Local build counter (avoid dirty git state on every compile)
+.build_number
+
+# Runtime & Databases
+*.db
+*.db-wal
+*.db-shm
+*.sock
+*.log
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store

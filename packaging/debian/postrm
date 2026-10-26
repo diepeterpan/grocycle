@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge)
+        rm -rf /var/lib/grocycle
+        rm -rf /etc/grocycle
+        rm -f /var/log/grocycle.log
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
+    ;;
+    remove)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
+    ;;
+esac
+
+exit 0

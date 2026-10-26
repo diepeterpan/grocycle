@@ -1,0 +1,19 @@
+{
+    "db_path": "/var/lib/grocycle/grocycle.db",
+    "socket_path": "/run/grocycle/grocycle.sock",
+    "log_file": "/var/log/grocycle.log",
+    "scan_interval_seconds": 3600,
+    "sleep_every_n_dirs": 250,
+    "sleep_duration_ms": 15,
+    "monitored_roots": [
+        "/"
+    ],
+    "excluded_prefixes": [
+        "/proc",
+        "/sys",
+        "/dev",
+        "/run",
+        "/tmp",
+        "/var/tmp"
+    ]
+}

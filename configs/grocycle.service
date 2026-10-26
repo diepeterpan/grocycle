@@ -1,0 +1,21 @@
+[Unit]
+Description=Grocycle Filesystem Growth Monitor Daemon
+After=network.target local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/grocycled -f -c /etc/grocycle/config.json
+Restart=on-failure
+RestartSec=10
+Nice=19
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+# Sandbox & security restrictions
+ProtectSystem=full
+ProtectHome=read-only
+ReadOnlyPaths=/
+ReadWritePaths=/var/lib/grocycle /run/grocycle /var/log
+
+[Install]
+WantedBy=multi-user.target

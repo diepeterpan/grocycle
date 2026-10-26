@@ -1,0 +1,16 @@
+---
+Checks: >
+  clang-diagnostic-*,
+  bugprone-*,
+  performance-*,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-braces-around-statements,
+  -bugprone-easily-swappable-parameters
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/.*'
+FormatStyle: none
+...

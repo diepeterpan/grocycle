@@ -1,0 +1,10 @@
+#pragma once
+
+namespace grocycle::version {
+
+constexpr const char* VERSION = "@PROJECT_VERSION@";
+constexpr int BUILD_NUMBER = @BUILD_NUMBER@;
+constexpr const char* BUILD_TIMESTAMP = "@BUILD_TIMESTAMP@";
+constexpr const char* FULL_VERSION_STRING = "v@PROJECT_VERSION@-b@BUILD_NUMBER@ (@BUILD_TIMESTAMP@)";
+
+} // namespace grocycle::version
