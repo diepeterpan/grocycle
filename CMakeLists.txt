@@ -222,4 +222,9 @@ set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
     "${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/postinst;${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/prerm;${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/postrm"
 )
 
+# Enable DESTDIR mechanism for CPack packaging so absolute install paths
+# (such as /lib/systemd/system) are staged into the packaging sandbox
+# instead of requiring root access to the host filesystem.
+set(CPACK_SET_DESTDIR ON)
+
 include(CPack)
