@@ -370,6 +370,21 @@ std::vector<SnapshotRecord> StorageEngine::get_recent_snapshots(int64_t root_id,
     return list;
 }
 
+int64_t StorageEngine::get_snapshot_dir_count(int64_t snapshot_id) {
+    std::string sql = "SELECT COUNT(*) FROM dir_metrics WHERE snapshot_id = ?;";
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, snapshot_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            int64_t count = sqlite3_column_int64(stmt, 0);
+            sqlite3_finalize(stmt);
+            return count;
+        }
+        sqlite3_finalize(stmt);
+    }
+    return 0;
+}
+
 bool StorageEngine::insert_metrics_batch(const std::vector<DirMetric> &metrics) {
     if (metrics.empty())
         return true;

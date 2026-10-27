@@ -15,6 +15,8 @@
 #include <sstream>
 #include <iostream>
 #include <algorithm>
+#include <thread>
+#include <atomic>
 
 using namespace ftxui;
 
@@ -239,17 +241,135 @@ int launch_tui(const Config &cfg) {
             std::string d_status = is_running ? "RUNNING" : "STOPPED";
             Color d_color = is_running ? Color::Green : Color::Red;
 
+            nlohmann::json status_json;
+            bool is_scanning = false;
+            int64_t last_s = 0;
+            int64_t next_s = 0;
+            int64_t scan_started_at = 0;
+            int64_t dirs_scanned = 0;
+            int64_t files_scanned = 0;
+            int64_t last_scan_total_dirs = 0;
+            std::string current_path = "";
+
+            if (is_running) {
+                status_json = client.send_command({{"command", "status"}});
+                if (status_json.value("status", "") == "ok") {
+                    is_scanning = status_json.value("is_scanning", false);
+                    last_s = status_json.value("last_scan_time", 0);
+                    next_s = status_json.value("next_scan_time", 0);
+                    if (status_json.contains("progress")) {
+                        auto p = status_json["progress"];
+                        scan_started_at = p.value("scan_started_at", 0);
+                        dirs_scanned = p.value("dirs_scanned", 0);
+                        files_scanned = p.value("files_scanned", 0);
+                        last_scan_total_dirs = p.value("last_scan_total_dirs", 0);
+                        current_path = p.value("current_path", "");
+                    }
+                }
+            }
+
+            int64_t now_ts = utils::current_timestamp();
+
+            // Status label
+            std::string status_badge = d_status;
+            if (is_running) {
+                status_badge = is_scanning ? "RUNNING (Active Scan)" : "RUNNING (Idle)";
+                d_color = is_scanning ? Color::Yellow : Color::Green;
+            }
+
+            // Timestamps formatting
+            std::string last_scan_str = "Never";
+            if (last_s > 0) {
+                int64_t ago = now_ts - last_s;
+                last_scan_str = utils::format_timestamp(last_s);
+                if (ago >= 0) {
+                    last_scan_str += " (" + utils::format_duration(static_cast<uint32_t>(ago)) + " ago)";
+                }
+            }
+
+            std::string next_scan_str = "Pending initial scan";
+            if (next_s > 0) {
+                int64_t until = next_s - now_ts;
+                next_scan_str = utils::format_timestamp(next_s);
+                if (until > 0) {
+                    next_scan_str += " (in " + utils::format_duration(static_cast<uint32_t>(until)) + ")";
+                } else if (is_scanning) {
+                    next_scan_str = "Scanning now";
+                } else {
+                    next_scan_str += " (due now)";
+                }
+            }
+
+            Elements modal_elements = {
+                text(" Daemon Control & Configuration ") | bold | center | color(Color::Cyan),
+                separator(),
+                hbox({text("Daemon Status: "), text(status_badge) | bold | color(d_color)}),
+                hbox({text("Scan Interval: "), text(utils::format_duration(cfg.scan_interval_seconds)) | bold}),
+                hbox({text("Last Scan:     "), text(last_scan_str) | color(Color::White)}),
+                hbox({text("Next Scan:     "), text(next_scan_str) | color(Color::White)})
+            };
+
+            // Active Scan Telemetry Section
+            if (is_scanning) {
+                modal_elements.push_back(separator());
+                modal_elements.push_back(text(" Current Scan Progress ") | bold | color(Color::Yellow));
+
+                // Elapsed time
+                int64_t elapsed_sec = (scan_started_at > 0) ? (now_ts - scan_started_at) : 0;
+                modal_elements.push_back(
+                    hbox({text("  Elapsed Time:  "), text(utils::format_elapsed_time(elapsed_sec)) | bold | color(Color::Yellow)})
+                );
+
+                // Dirs & files counts
+                std::string counts_str = std::to_string(dirs_scanned) + " dirs, " + std::to_string(files_scanned) + " files";
+                modal_elements.push_back(
+                    hbox({text("  Scanned:       "), text(counts_str) | bold | color(Color::White)})
+                );
+
+                // Truncate current path if too long
+                if (!current_path.empty()) {
+                    std::string disp_path = current_path;
+                    if (disp_path.length() > 42) {
+                        disp_path = "..." + disp_path.substr(disp_path.length() - 39);
+                    }
+                    modal_elements.push_back(
+                        hbox({text("  Current Path:  "), text(disp_path) | dim})
+                    );
+                }
+
+                // Estimated progress percentage
+                if (last_scan_total_dirs > 0) {
+                    float pct = static_cast<float>(dirs_scanned) / static_cast<float>(last_scan_total_dirs);
+                    if (pct > 0.99f) pct = 0.99f;
+                    if (pct < 0.0f) pct = 0.0f;
+                    int pct_int = static_cast<int>(pct * 100.0f);
+
+                    std::string gauge_label = std::to_string(pct_int) + "% (~" +
+                                              std::to_string(dirs_scanned) + "/" +
+                                              std::to_string(last_scan_total_dirs) + " dirs)";
+
+                    modal_elements.push_back(
+                        hbox({text("  Progress:      "), gauge(pct) | color(Color::Cyan) | size(WIDTH, EQUAL, 20),
+                              text(" " + gauge_label) | color(Color::CyanLight)})
+                    );
+                } else {
+                    modal_elements.push_back(
+                        hbox({text("  Progress:      "), text("Initial baseline scan (measuring totals)...") | color(Color::CyanLight)})
+                    );
+                }
+            }
+
+            modal_elements.push_back(separator());
+            modal_elements.push_back(text("Actions:") | bold);
+            modal_elements.push_back(text("  [S] Trigger Scan Now"));
+            modal_elements.push_back(text("  [ESC/M] Close this dialog"));
+            modal_elements.push_back(separator());
+            modal_elements.push_back(text("Press [ESC] or [M] to return to explorer.") | dim | center);
+
             auto modal_content =
-                vbox({text(" Daemon Control & Configuration ") | bold | center | color(Color::Cyan), separator(),
-                      hbox({text("Daemon Status: "), text(d_status) | bold | color(d_color)}),
-                      hbox({text("Socket Path:   "), text(cfg.socket_path) | dim}),
-                      hbox({text("Database Path: "), text(cfg.db_path) | dim}),
-                      hbox({text("Scan Interval: "), text(utils::format_duration(cfg.scan_interval_seconds)) | bold}),
-                      separator(), text("Actions:") | bold, text("  [S] Trigger Scan Now"),
-                      text("  [ESC/M] Close this dialog"), separator(),
-                      text("Press [ESC] or [M] to return to explorer.") | dim | center}) |
-                size(WIDTH, EQUAL, 56) | bgcolor(Color::RGB(20, 20, 24)) | color(Color::White) | borderHeavy |
-                color(Color::Cyan) | clear_under; // Completely erases underlying canvas glyphs and colors
+                vbox(std::move(modal_elements)) |
+                size(WIDTH, EQUAL, 64) | bgcolor(Color::RGB(20, 20, 24)) | color(Color::White) | borderHeavy |
+                color(Color::Cyan) | clear_under;
 
             return dbox({main_view | dim, modal_content | center});
         }
@@ -393,7 +513,21 @@ int launch_tui(const Config &cfg) {
         return false;
     });
 
+    std::atomic<bool> tui_running{true};
+    std::thread refresh_thread([&]() {
+        while (tui_running.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            if (show_settings_modal) {
+                screen.PostEvent(Event::Custom);
+            }
+        }
+    });
+
     screen.Loop(component);
+    tui_running.store(false);
+    if (refresh_thread.joinable()) {
+        refresh_thread.join();
+    }
     return 0;
 }
 

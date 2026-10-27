@@ -1,4 +1,5 @@
 #include "scanner/fs_scanner.hpp"
+#include "common/utils.hpp"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -41,6 +42,7 @@ bool FsScanner::scan_root(int64_t root_id, const std::string &root_path, std::at
 
     progress_.current_root = root_path;
     progress_.current_path = root_path;
+    progress_.scan_started_at = utils::current_timestamp();
     progress_.directories_scanned = 0;
     progress_.files_scanned = 0;
     progress_.total_allocated_bytes = 0;

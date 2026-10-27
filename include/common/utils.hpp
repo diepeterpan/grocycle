@@ -21,6 +21,9 @@ int64_t current_timestamp();
 // Converts timestamp to formatted date/time string
 std::string format_timestamp(int64_t epoch_sec);
 
+// Formats elapsed duration with seconds (e.g., "12s", "1m 24s", "2h 05m 12s")
+std::string format_elapsed_time(int64_t seconds);
+
 // Ensures parent directories exist
 bool ensure_parent_dir(const std::string &file_path);
 

@@ -87,6 +87,7 @@ public:
     std::optional<SnapshotRecord> get_latest_snapshot(int64_t root_id);
     std::optional<SnapshotRecord> get_snapshot_near_timestamp(int64_t root_id, int64_t target_timestamp);
     std::vector<SnapshotRecord> get_recent_snapshots(int64_t root_id, size_t limit = 10);
+    int64_t get_snapshot_dir_count(int64_t snapshot_id);
 
     // Metrics batch insertion
     bool insert_metrics_batch(const std::vector<DirMetric> &metrics);

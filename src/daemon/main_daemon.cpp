@@ -81,7 +81,14 @@ int main(int argc, char **argv) {
     grocycle::scanner::FsScanner scanner(storage, cfg.sleep_every_n_dirs, cfg.sleep_duration_ms, cfg.excluded_prefixes);
 
     int64_t last_scan_time = 0;
-    int64_t next_scan_time = grocycle::utils::current_timestamp(); // First scan soon after startup
+    auto startup_roots = storage.get_monitored_roots();
+    if (!startup_roots.empty()) {
+        auto latest_snap = storage.get_latest_snapshot(startup_roots.front().id);
+        if (latest_snap.has_value()) {
+            last_scan_time = latest_snap->completed_at > 0 ? latest_snap->completed_at : latest_snap->started_at;
+        }
+    }
+    int64_t next_scan_time = (last_scan_time > 0) ? (last_scan_time + cfg.scan_interval_seconds) : grocycle::utils::current_timestamp();
 
     // Setup IPC Socket Server
     grocycle::ipc::SocketServer server(cfg.socket_path, [&](const json &req) -> json {
@@ -90,6 +97,14 @@ int main(int argc, char **argv) {
             return {{"status", "ok"}, {"message", "pong"}, {"pid", getpid()}};
         } else if (cmd == "status") {
             auto progress = scanner.get_progress();
+            int64_t last_scan_total_dirs = 0;
+            auto roots = storage.get_monitored_roots();
+            if (!roots.empty()) {
+                auto latest_snap = storage.get_latest_snapshot(roots.front().id);
+                if (latest_snap.has_value()) {
+                    last_scan_total_dirs = storage.get_snapshot_dir_count(latest_snap->id);
+                }
+            }
             return {{"status", "ok"},
                     {"pid", getpid()},
                     {"is_scanning", g_is_scanning.load()},
@@ -100,10 +115,12 @@ int main(int argc, char **argv) {
                     {"progress",
                      {{"current_root", progress.current_root},
                       {"current_path", progress.current_path},
+                      {"scan_started_at", progress.scan_started_at},
                       {"dirs_scanned", progress.directories_scanned},
                       {"files_scanned", progress.files_scanned},
                       {"allocated_bytes", progress.total_allocated_bytes},
-                      {"apparent_bytes", progress.total_apparent_bytes}}}};
+                      {"apparent_bytes", progress.total_apparent_bytes},
+                      {"last_scan_total_dirs", last_scan_total_dirs}}}};
         } else if (cmd == "scan_now") {
             if (g_is_scanning.load()) {
                 return {{"status", "error"}, {"message", "Scan already in progress"}};

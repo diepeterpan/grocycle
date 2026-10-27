@@ -12,6 +12,7 @@ namespace grocycle::scanner {
 struct ScanProgress {
     std::string current_root;
     std::string current_path;
+    int64_t scan_started_at = 0;
     int64_t directories_scanned = 0;
     int64_t files_scanned = 0;
     int64_t total_allocated_bytes = 0;
