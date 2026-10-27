@@ -88,7 +88,8 @@ int main(int argc, char **argv) {
             last_scan_time = latest_snap->completed_at > 0 ? latest_snap->completed_at : latest_snap->started_at;
         }
     }
-    int64_t next_scan_time = (last_scan_time > 0) ? (last_scan_time + cfg.scan_interval_seconds) : grocycle::utils::current_timestamp();
+    int64_t next_scan_time =
+        (last_scan_time > 0) ? (last_scan_time + cfg.scan_interval_seconds) : grocycle::utils::current_timestamp();
 
     // Setup IPC Socket Server
     grocycle::ipc::SocketServer server(cfg.socket_path, [&](const json &req) -> json {

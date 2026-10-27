@@ -5,6 +5,7 @@
 #include <optional>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 
 struct sqlite3;
 
@@ -112,6 +113,7 @@ public:
 private:
     std::string db_path_;
     sqlite3 *db_ = nullptr;
+    mutable std::recursive_mutex db_mutex_;
 
     bool execute_sql(const std::string &sql);
 };

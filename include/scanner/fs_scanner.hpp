@@ -6,6 +6,7 @@
 #include <vector>
 #include <atomic>
 #include <functional>
+#include <mutex>
 
 namespace grocycle::scanner {
 
@@ -49,6 +50,7 @@ private:
     Throttle throttle_;
     std::vector<std::string> excluded_prefixes_;
     ScanProgress progress_;
+    mutable std::mutex progress_mutex_;
     std::function<void(const ScanProgress &)> progress_cb_;
 
     bool is_excluded(const std::string &path) const;

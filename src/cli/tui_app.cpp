@@ -306,8 +306,7 @@ int launch_tui(const Config &cfg) {
                 hbox({text("Daemon Status: "), text(status_badge) | bold | color(d_color)}),
                 hbox({text("Scan Interval: "), text(utils::format_duration(cfg.scan_interval_seconds)) | bold}),
                 hbox({text("Last Scan:     "), text(last_scan_str) | color(Color::White)}),
-                hbox({text("Next Scan:     "), text(next_scan_str) | color(Color::White)})
-            };
+                hbox({text("Next Scan:     "), text(next_scan_str) | color(Color::White)})};
 
             // Active Scan Telemetry Section
             if (is_scanning) {
@@ -317,14 +316,14 @@ int launch_tui(const Config &cfg) {
                 // Elapsed time
                 int64_t elapsed_sec = (scan_started_at > 0) ? (now_ts - scan_started_at) : 0;
                 modal_elements.push_back(
-                    hbox({text("  Elapsed Time:  "), text(utils::format_elapsed_time(elapsed_sec)) | bold | color(Color::Yellow)})
-                );
+                    hbox({text("  Elapsed Time:  "),
+                          text(utils::format_elapsed_time(elapsed_sec)) | bold | color(Color::Yellow)}));
 
                 // Dirs & files counts
-                std::string counts_str = std::to_string(dirs_scanned) + " dirs, " + std::to_string(files_scanned) + " files";
+                std::string counts_str =
+                    std::to_string(dirs_scanned) + " dirs, " + std::to_string(files_scanned) + " files";
                 modal_elements.push_back(
-                    hbox({text("  Scanned:       "), text(counts_str) | bold | color(Color::White)})
-                );
+                    hbox({text("  Scanned:       "), text(counts_str) | bold | color(Color::White)}));
 
                 // Truncate current path if too long
                 if (!current_path.empty()) {
@@ -332,30 +331,28 @@ int launch_tui(const Config &cfg) {
                     if (disp_path.length() > 42) {
                         disp_path = "..." + disp_path.substr(disp_path.length() - 39);
                     }
-                    modal_elements.push_back(
-                        hbox({text("  Current Path:  "), text(disp_path) | dim})
-                    );
+                    modal_elements.push_back(hbox({text("  Current Path:  "), text(disp_path) | dim}));
                 }
 
                 // Estimated progress percentage
                 if (last_scan_total_dirs > 0) {
                     float pct = static_cast<float>(dirs_scanned) / static_cast<float>(last_scan_total_dirs);
-                    if (pct > 0.99f) pct = 0.99f;
-                    if (pct < 0.0f) pct = 0.0f;
+                    if (pct > 0.99f)
+                        pct = 0.99f;
+                    if (pct < 0.0f)
+                        pct = 0.0f;
                     int pct_int = static_cast<int>(pct * 100.0f);
 
-                    std::string gauge_label = std::to_string(pct_int) + "% (~" +
-                                              std::to_string(dirs_scanned) + "/" +
+                    std::string gauge_label = std::to_string(pct_int) + "% (~" + std::to_string(dirs_scanned) + "/" +
                                               std::to_string(last_scan_total_dirs) + " dirs)";
 
                     modal_elements.push_back(
                         hbox({text("  Progress:      "), gauge(pct) | color(Color::Cyan) | size(WIDTH, EQUAL, 20),
-                              text(" " + gauge_label) | color(Color::CyanLight)})
-                    );
+                              text(" " + gauge_label) | color(Color::CyanLight)}));
                 } else {
                     modal_elements.push_back(
-                        hbox({text("  Progress:      "), text("Initial baseline scan (measuring totals)...") | color(Color::CyanLight)})
-                    );
+                        hbox({text("  Progress:      "),
+                              text("Initial baseline scan (measuring totals)...") | color(Color::CyanLight)}));
                 }
             }
 
@@ -366,10 +363,9 @@ int launch_tui(const Config &cfg) {
             modal_elements.push_back(separator());
             modal_elements.push_back(text("Press [ESC] or [M] to return to explorer.") | dim | center);
 
-            auto modal_content =
-                vbox(std::move(modal_elements)) |
-                size(WIDTH, EQUAL, 64) | bgcolor(Color::RGB(20, 20, 24)) | color(Color::White) | borderHeavy |
-                color(Color::Cyan) | clear_under;
+            auto modal_content = vbox(std::move(modal_elements)) | size(WIDTH, EQUAL, 64) |
+                                 bgcolor(Color::RGB(20, 20, 24)) | color(Color::White) | borderHeavy |
+                                 color(Color::Cyan) | clear_under;
 
             return dbox({main_view | dim, modal_content | center});
         }

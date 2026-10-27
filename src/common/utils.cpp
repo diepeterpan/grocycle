@@ -111,7 +111,8 @@ std::string format_timestamp(int64_t epoch_sec) {
 }
 
 std::string format_elapsed_time(int64_t seconds) {
-    if (seconds < 0) seconds = 0;
+    if (seconds < 0)
+        seconds = 0;
     if (seconds < 60) {
         return std::to_string(seconds) + "s";
     }
@@ -125,8 +126,8 @@ std::string format_elapsed_time(int64_t seconds) {
     int64_t hours = mins / 60;
     mins %= 60;
     std::ostringstream ss;
-    ss << hours << "h " << std::setw(2) << std::setfill('0') << mins << "m "
-       << std::setw(2) << std::setfill('0') << secs << "s";
+    ss << hours << "h " << std::setw(2) << std::setfill('0') << mins << "m " << std::setw(2) << std::setfill('0')
+       << secs << "s";
     return ss.str();
 }
 

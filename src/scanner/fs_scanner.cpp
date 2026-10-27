@@ -26,6 +26,7 @@ bool FsScanner::is_excluded(const std::string &path) const {
 }
 
 ScanProgress FsScanner::get_progress() const {
+    std::lock_guard<std::mutex> lock(progress_mutex_);
     return progress_;
 }
 
@@ -40,17 +41,21 @@ bool FsScanner::scan_root(int64_t root_id, const std::string &root_path, std::at
         return false;
     }
 
-    progress_.current_root = root_path;
-    progress_.current_path = root_path;
-    progress_.scan_started_at = utils::current_timestamp();
-    progress_.directories_scanned = 0;
-    progress_.files_scanned = 0;
-    progress_.total_allocated_bytes = 0;
-    progress_.total_apparent_bytes = 0;
-    progress_.is_running = true;
+    {
+        std::lock_guard<std::mutex> lock(progress_mutex_);
+        progress_.current_root = root_path;
+        progress_.current_path = root_path;
+        progress_.scan_started_at = utils::current_timestamp();
+        progress_.directories_scanned = 0;
+        progress_.files_scanned = 0;
+        progress_.total_allocated_bytes = 0;
+        progress_.total_apparent_bytes = 0;
+        progress_.is_running = true;
+    }
 
     int64_t snapshot_id = storage_.create_snapshot(root_id);
     if (snapshot_id <= 0) {
+        std::lock_guard<std::mutex> lock(progress_mutex_);
         progress_.is_running = false;
         return false;
     }
@@ -64,6 +69,7 @@ bool FsScanner::scan_root(int64_t root_id, const std::string &root_path, std::at
 
     if (cancel_flag.load()) {
         storage_.abort_snapshot(snapshot_id);
+        std::lock_guard<std::mutex> lock(progress_mutex_);
         progress_.is_running = false;
         return false;
     }
@@ -74,10 +80,14 @@ bool FsScanner::scan_root(int64_t root_id, const std::string &root_path, std::at
         metrics.clear();
     }
 
-    storage_.finish_snapshot(snapshot_id, total.total_allocated, total.total_apparent,
-                             progress_.files_scanned + progress_.directories_scanned);
+    int64_t total_items = 0;
+    {
+        std::lock_guard<std::mutex> lock(progress_mutex_);
+        total_items = progress_.files_scanned + progress_.directories_scanned;
+        progress_.is_running = false;
+    }
 
-    progress_.is_running = false;
+    storage_.finish_snapshot(snapshot_id, total.total_allocated, total.total_apparent, total_items);
     return true;
 }
 
@@ -98,11 +108,13 @@ FsScanner::DirStat FsScanner::scan_directory_recursive(int64_t snapshot_id, cons
 
     // Register path in DB dictionary
     dir_stat.path_id = storage_.get_or_create_path(current_dir, parent_path_id);
-    progress_.directories_scanned++;
-    progress_.current_path = current_dir;
-
-    if (progress_cb_ && (progress_.directories_scanned % 100 == 0)) {
-        progress_cb_(progress_);
+    {
+        std::lock_guard<std::mutex> lock(progress_mutex_);
+        progress_.directories_scanned++;
+        progress_.current_path = current_dir;
+        if (progress_cb_ && (progress_.directories_scanned % 100 == 0)) {
+            progress_cb_(progress_);
+        }
     }
 
     // Open directory with O_DIRECTORY and O_NOATIME (if supported)
@@ -153,12 +165,14 @@ FsScanner::DirStat FsScanner::scan_directory_recursive(int64_t snapshot_id, cons
             subdirectories.push_back(child_path);
         } else if (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
             dir_stat.direct_files++;
-            progress_.files_scanned++;
             int64_t allocated = static_cast<int64_t>(st.st_blocks) * 512;
             int64_t apparent = static_cast<int64_t>(st.st_size);
 
             dir_stat.self_allocated += allocated;
             dir_stat.self_apparent += apparent;
+
+            std::lock_guard<std::mutex> lock(progress_mutex_);
+            progress_.files_scanned++;
             progress_.total_allocated_bytes += allocated;
             progress_.total_apparent_bytes += apparent;
         }

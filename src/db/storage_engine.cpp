@@ -16,6 +16,7 @@ StorageEngine::~StorageEngine() {
 }
 
 void StorageEngine::close() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     if (db_) {
         sqlite3_close(db_);
         db_ = nullptr;
@@ -23,6 +24,7 @@ void StorageEngine::close() {
 }
 
 bool StorageEngine::execute_sql(const std::string &sql) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     char *err_msg = nullptr;
     int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err_msg);
     if (rc != SQLITE_OK) {
@@ -36,9 +38,10 @@ bool StorageEngine::execute_sql(const std::string &sql) {
 }
 
 bool StorageEngine::initialize() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     utils::ensure_parent_dir(db_path_);
 
-    int rc = sqlite3_open_v2(db_path_.c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX,
+    int rc = sqlite3_open_v2(db_path_.c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
                              nullptr);
     if (rc != SQLITE_OK) {
         std::cerr << "Failed to open SQLite database: " << sqlite3_errmsg(db_) << std::endl;
@@ -97,6 +100,7 @@ bool StorageEngine::initialize() {
 }
 
 int64_t StorageEngine::get_or_create_root(const std::string &path) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql_find = "SELECT id FROM monitored_roots WHERE path = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql_find.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -124,6 +128,7 @@ int64_t StorageEngine::get_or_create_root(const std::string &path) {
 }
 
 std::vector<RootRecord> StorageEngine::get_monitored_roots() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::vector<RootRecord> roots;
     std::string sql = "SELECT id, path, enabled, created_at FROM monitored_roots ORDER BY id ASC;";
     sqlite3_stmt *stmt = nullptr;
@@ -142,6 +147,7 @@ std::vector<RootRecord> StorageEngine::get_monitored_roots() {
 }
 
 bool StorageEngine::set_root_enabled(const std::string &path, bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "UPDATE monitored_roots SET enabled = ? WHERE path = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -155,6 +161,7 @@ bool StorageEngine::set_root_enabled(const std::string &path, bool enabled) {
 }
 
 bool StorageEngine::remove_root(const std::string &path) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "DELETE FROM monitored_roots WHERE path = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -167,6 +174,7 @@ bool StorageEngine::remove_root(const std::string &path) {
 }
 
 int64_t StorageEngine::get_or_create_path(const std::string &full_path, int64_t parent_id, const std::string &name) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     sqlite3_stmt *stmt = nullptr;
     std::string sql_find = "SELECT id FROM paths WHERE full_path = ?;";
     if (sqlite3_prepare_v2(db_, sql_find.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -207,6 +215,7 @@ int64_t StorageEngine::get_or_create_path(const std::string &full_path, int64_t 
 }
 
 std::optional<PathRecord> StorageEngine::get_path(int64_t path_id) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "SELECT id, parent_id, name, full_path FROM paths WHERE id = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -226,6 +235,7 @@ std::optional<PathRecord> StorageEngine::get_path(int64_t path_id) {
 }
 
 std::optional<PathRecord> StorageEngine::find_path_by_string(const std::string &full_path) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "SELECT id, parent_id, name, full_path FROM paths WHERE full_path = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -245,6 +255,7 @@ std::optional<PathRecord> StorageEngine::find_path_by_string(const std::string &
 }
 
 int64_t StorageEngine::create_snapshot(int64_t root_id) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "INSERT INTO snapshots (root_id, started_at, status) VALUES (?, ?, 'IN_PROGRESS');";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -262,6 +273,7 @@ int64_t StorageEngine::create_snapshot(int64_t root_id) {
 
 bool StorageEngine::finish_snapshot(int64_t snapshot_id, int64_t total_allocated, int64_t total_apparent,
                                     int64_t inodes) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "UPDATE snapshots SET completed_at = ?, total_allocated_bytes = ?, total_apparent_bytes = ?, "
                       "total_inodes = ?, status = 'COMPLETED' WHERE id = ?;";
     sqlite3_stmt *stmt = nullptr;
@@ -279,6 +291,7 @@ bool StorageEngine::finish_snapshot(int64_t snapshot_id, int64_t total_allocated
 }
 
 bool StorageEngine::abort_snapshot(int64_t snapshot_id) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "UPDATE snapshots SET completed_at = ?, status = 'ABORTED' WHERE id = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -292,6 +305,7 @@ bool StorageEngine::abort_snapshot(int64_t snapshot_id) {
 }
 
 std::optional<SnapshotRecord> StorageEngine::get_latest_snapshot(int64_t root_id) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "SELECT id, root_id, started_at, completed_at, total_allocated_bytes, total_apparent_bytes, "
                       "total_inodes, status "
                       "FROM snapshots WHERE root_id = ? AND status = 'COMPLETED' ORDER BY started_at DESC LIMIT 1;";
@@ -317,6 +331,7 @@ std::optional<SnapshotRecord> StorageEngine::get_latest_snapshot(int64_t root_id
 }
 
 std::optional<SnapshotRecord> StorageEngine::get_snapshot_near_timestamp(int64_t root_id, int64_t target_timestamp) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     // Find closest snapshot <= target_timestamp (or closest overall)
     std::string sql = "SELECT id, root_id, started_at, completed_at, total_allocated_bytes, total_apparent_bytes, "
                       "total_inodes, status "
@@ -345,6 +360,7 @@ std::optional<SnapshotRecord> StorageEngine::get_snapshot_near_timestamp(int64_t
 }
 
 std::vector<SnapshotRecord> StorageEngine::get_recent_snapshots(int64_t root_id, size_t limit) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::vector<SnapshotRecord> list;
     std::string sql = "SELECT id, root_id, started_at, completed_at, total_allocated_bytes, total_apparent_bytes, "
                       "total_inodes, status "
@@ -371,6 +387,7 @@ std::vector<SnapshotRecord> StorageEngine::get_recent_snapshots(int64_t root_id,
 }
 
 int64_t StorageEngine::get_snapshot_dir_count(int64_t snapshot_id) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::string sql = "SELECT COUNT(*) FROM dir_metrics WHERE snapshot_id = ?;";
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -389,6 +406,7 @@ bool StorageEngine::insert_metrics_batch(const std::vector<DirMetric> &metrics) 
     if (metrics.empty())
         return true;
 
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     execute_sql("BEGIN TRANSACTION;");
     std::string sql = "INSERT OR REPLACE INTO dir_metrics "
                       "(snapshot_id, path_id, allocated_size, apparent_size, direct_files, total_subdirs) "
@@ -421,6 +439,7 @@ bool StorageEngine::insert_metrics_batch(const std::vector<DirMetric> &metrics) 
 std::vector<GrowthEntry> StorageEngine::get_fastest_growing(int64_t /*root_id*/, int64_t earlier_snapshot_id,
                                                             int64_t later_snapshot_id, int64_t parent_path_id,
                                                             bool direct_children_only, size_t limit) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     std::vector<GrowthEntry> results;
 
     std::ostringstream ss;
@@ -506,6 +525,7 @@ std::vector<GrowthEntry> StorageEngine::get_children_growth(int64_t root_id, int
 }
 
 size_t StorageEngine::prune_old_snapshots(int retention_days) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     int64_t threshold_time = utils::current_timestamp() - (retention_days * 86400LL);
     std::string sql = "DELETE FROM snapshots WHERE started_at < ?;";
     sqlite3_stmt *stmt = nullptr;
@@ -521,6 +541,7 @@ size_t StorageEngine::prune_old_snapshots(int retention_days) {
 }
 
 bool StorageEngine::clear_all_data() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     execute_sql("BEGIN TRANSACTION;");
     execute_sql("DELETE FROM dir_metrics;");
     execute_sql("DELETE FROM snapshots;");
