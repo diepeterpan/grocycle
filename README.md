@@ -140,6 +140,40 @@ docker run --rm -v $(pwd):/workspace grocycle-dev bash -c "cd build && make form
 
 ---
 
+### Method 4: Run with Docker Compose (Background Monitor + Web App)
+
+Grocycle can be run as a containerized stack using Docker Compose. The container automatically starts the background growth monitor daemon (`grocycled`) and exposes the interactive Web Terminal UI (`grocycle web`) directly in your browser.
+
+```bash
+# 1. (Optional) Customize environment variables such as monitored host path or port
+cp .env.example .env
+
+# 2. Build and launch the container in the background
+docker compose up -d --build
+
+# 3. Open the interactive web terminal explorer in your browser
+#    URL: http://localhost:8080
+```
+
+#### Common Container Tasks
+
+```bash
+# Inspect service status and active scan progress inside container
+docker compose exec grocycle grocycle service status
+
+# Query top growing directories in terminal
+docker compose exec grocycle grocycle top
+
+# View live container logs
+docker compose logs -f
+
+# Gracefully stop the container
+docker compose down
+```
+
+For advanced configuration (such as scan interval, custom exclusions, HTTP basic auth, or custom mount paths), edit your `.env` file before launching.
+
+
 ### Developer & Maintainer Scripts
 
 Two helper scripts are provided in `scripts/` to streamline pre-checkin validation and releases:

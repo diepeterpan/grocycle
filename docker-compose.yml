@@ -1,0 +1,87 @@
+services:
+  grocycle:
+    container_name: grocycle
+    image: grocycle:latest
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:${GROCYCLE_WEB_PORT:-8080}"
+    volumes:
+      # Host path to monitor mounted read-only into container
+      - "${HOST_MONITOR_PATH:-/}:${CONTAINER_MONITOR_PATH:-/monitored}:ro"
+      # Persistent SQLite metrics database volume across container updates
+      - "grocycle_data:/var/lib/grocycle"
+      # Persistent logs volume
+      - "grocycle_logs:/var/log"
+    environment:
+      - HOST_MONITOR_PATH=${HOST_MONITOR_PATH:-/}
+      - CONTAINER_MONITOR_PATH=${CONTAINER_MONITOR_PATH:-/monitored}
+      - GROCYCLE_MONITORED_ROOTS=${GROCYCLE_MONITORED_ROOTS:-/monitored}
+      - GROCYCLE_SCAN_INTERVAL=${GROCYCLE_SCAN_INTERVAL:-1h}
+      - GROCYCLE_EXCLUDED_PREFIXES=${GROCYCLE_EXCLUDED_PREFIXES:-/proc,/sys,/dev,/run,/tmp,/var/tmp}
+      - GROCYCLE_THROTTLE_BATCH=${GROCYCLE_THROTTLE_BATCH:-250}
+      - GROCYCLE_THROTTLE_SLEEP_MS=${GROCYCLE_THROTTLE_SLEEP_MS:-15}
+      - GROCYCLE_DB_PATH=${GROCYCLE_DB_PATH:-/var/lib/grocycle/grocycle.db}
+      - GROCYCLE_SOCKET_PATH=${GROCYCLE_SOCKET_PATH:-/run/grocycle/grocycle.sock}
+      - GROCYCLE_LOG_FILE=${GROCYCLE_LOG_FILE:-/var/log/grocycle.log}
+      - GROCYCLE_WEB_PORT=${GROCYCLE_WEB_PORT:-8080}
+      - GROCYCLE_WEB_AUTH=${GROCYCLE_WEB_AUTH:-}
+      - GROCYCLE_WEB_MAX_CLIENTS=${GROCYCLE_WEB_MAX_CLIENTS:-5}
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM debian:trixie-slim
+
+        ARG REPO="diepeterpan/grocycle"
+        ARG RELEASE_TAG="latest"
+
+        # Install runtime dependencies and utilities
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            libsqlite3-0 \
+            tini \
+            jq \
+            bash \
+            procps \
+            && rm -rf /var/lib/apt/lists/*
+
+        # Download latest release .deb package or fallback to building from main.tar.gz
+        RUN set -eux; \
+            DEB_URL=""; \
+            if [ "$$RELEASE_TAG" = "latest" ]; then \
+                DEB_URL=$$(curl -fsSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$${REPO}/releases/latest" 2>/dev/null | grep -o 'https://[^"]*grocycle_[^"]*_amd64\.deb' | head -n 1 || true); \
+                if [ -z "$$DEB_URL" ]; then \
+                    DEB_URL=$$(curl -fsSL "https://github.com/$${REPO}/releases" 2>/dev/null | grep -o '/'"$${REPO}"'/releases/download/[^"]*grocycle_[^"]*_amd64\.deb' | head -n 1 | sed 's|^|https://github.com|' || true); \
+                fi; \
+            else \
+                TAG="$${RELEASE_TAG#v}"; \
+                DEB_URL="https://github.com/$${REPO}/releases/download/v$${TAG}/grocycle_$${TAG}_amd64.deb"; \
+            fi; \
+            if [ -n "$$DEB_URL" ] && curl -fsSL -o /tmp/grocycle.deb "$$DEB_URL"; then \
+                echo "Successfully downloaded release package: $$DEB_URL"; \
+                dpkg -i /tmp/grocycle.deb; \
+                rm -f /tmp/grocycle.deb; \
+            else \
+                echo "Release package not found. Building from source via main.tar.gz..."; \
+                apt-get update && apt-get install -y --no-install-recommends build-essential cmake git libsqlite3-dev sqlite3; \
+                mkdir -p /tmp/src; \
+                curl -fsSL "https://github.com/$${REPO}/archive/refs/heads/main.tar.gz" | tar -xz --strip-components=1 -C /tmp/src; \
+                cmake -B /tmp/src/build -S /tmp/src -DCMAKE_BUILD_TYPE=Release; \
+                cmake --build /tmp/src/build -j$$(nproc); \
+                cmake --install /tmp/src/build; \
+                rm -rf /tmp/src; \
+                apt-get purge -y build-essential cmake git libsqlite3-dev && apt-get autoremove -y; \
+                rm -rf /var/lib/apt/lists/*; \
+            fi
+
+        COPY docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+        RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+        ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+volumes:
+  grocycle_data:
+    name: grocycle_data
+  grocycle_logs:
+    name: grocycle_logs

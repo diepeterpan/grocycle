@@ -32,3 +32,5 @@ dist/
 *.swo
 *~
 .DS_Store
+# Local environment configuration
+.env
