@@ -43,7 +43,7 @@ jobs:
           echo "${{ github.run_number }}" > .build_number
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DPROJECT_VERSION=${{ steps.get_version.outputs.VERSION }}
+            -DGROCYCLE_VERSION=${{ steps.get_version.outputs.VERSION }}
 
       - name: Compile and Test
         run: |
@@ -56,6 +56,8 @@ jobs:
           mkdir -p release_assets
           cp build/grocycle_*.deb release_assets/
           cp build/grocycle_*.tar.gz release_assets/
+          # Also provide a canonical latest package alias for generic downloads
+          cp build/grocycle_${{ steps.get_version.outputs.VERSION }}_amd64.deb release_assets/grocycle_latest_amd64.deb 2>/dev/null || cp build/grocycle_*.deb release_assets/grocycle_latest_amd64.deb
           
           # Generate SHA256 checksums
           cd release_assets

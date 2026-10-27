@@ -98,7 +98,6 @@ trap cleanup SIGTERM SIGINT SIGHUP
 
 # Assemble web server command arguments
 WEB_ARGS=(
-    "-c" "$CONFIG_FILE"
     "-p" "${GROCYCLE_WEB_PORT:-8080}"
     "-H" "0.0.0.0"
     "--max-clients" "${GROCYCLE_WEB_MAX_CLIENTS:-5}"
@@ -109,7 +108,7 @@ if [ -n "$GROCYCLE_WEB_AUTH" ]; then
 fi
 
 echo "[grocycle-docker] Starting web UI on port ${GROCYCLE_WEB_PORT:-8080}..."
-grocycle web "${WEB_ARGS[@]}" &
+grocycle -c "$CONFIG_FILE" web "${WEB_ARGS[@]}" &
 WEB_PID=$!
 
 # Wait for either process to terminate

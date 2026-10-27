@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
-project(grocycle VERSION 1.0.0 LANGUAGES C CXX)
+
+# Allow version override via -DGROCYCLE_VERSION=<version> from CI / git tag
+if(NOT DEFINED GROCYCLE_VERSION)
+    set(GROCYCLE_VERSION "1.0.0")
+endif()
+
+project(grocycle VERSION ${GROCYCLE_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -224,6 +230,7 @@ install(FILES configs/grocycle.conf.example
 set(CPACK_PACKAGE_NAME "grocycle")
 set(CPACK_PACKAGE_VENDOR "Grocycle Team")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Native Linux directory growth monitor and interactive TUI explorer")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
