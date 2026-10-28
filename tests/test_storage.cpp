@@ -45,6 +45,38 @@ void test_storage() {
     assert(snap->id == s1);
     assert(snap->total_allocated_bytes == 1000);
 
+    // Test metric insertion for p1
+    std::vector<grocycle::db::DirMetric> metrics;
+    grocycle::db::DirMetric m1;
+    m1.snapshot_id = s1;
+    m1.path_id = p1;
+    m1.allocated_size = 1000;
+    m1.apparent_size = 950;
+    m1.direct_files = 5;
+    m1.total_subdirs = 2;
+    metrics.push_back(m1);
+    assert(storage.insert_metrics_batch(metrics));
+
+    // At this point, p1 has metric, but p2 and p3 are unreferenced.
+    // Purge orphaned paths should delete p2 and p3 (2 paths deleted)
+    size_t purged = storage.purge_orphaned_paths();
+    assert(purged == 2);
+    assert(storage.get_path(p1).has_value());
+    assert(!storage.get_path(p2).has_value());
+    assert(!storage.get_path(p3).has_value());
+
+    // Test prune_old_snapshots with 0 days retention (prunes snapshot older than now)
+    // Note: since s1 was created just now, let's test prune with retention = 0
+    size_t pruned = storage.prune_old_snapshots(0);
+    assert(pruned >= 1);
+    assert(!storage.get_latest_snapshot(r1).has_value());
+
+    // After snapshot s1 is deleted, p1 is now also orphaned
+    assert(storage.get_path(p1) == std::nullopt); // prune_old_snapshots runs purge_orphaned_paths internally!
+
+    // Test vacuum method
+    assert(storage.vacuum());
+
     std::cout << "[PASS] test_storage passed successfully." << std::endl;
     fs::remove(test_db);
 }

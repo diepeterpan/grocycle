@@ -49,6 +49,7 @@ bool StorageEngine::initialize() {
     }
 
     // Set Pragmas for performance and concurrency
+    execute_sql("PRAGMA auto_vacuum = INCREMENTAL;");
     execute_sql("PRAGMA journal_mode = WAL;");
     execute_sql("PRAGMA synchronous = NORMAL;");
     execute_sql("PRAGMA foreign_keys = ON;");
@@ -527,7 +528,7 @@ std::vector<GrowthEntry> StorageEngine::get_children_growth(int64_t root_id, int
 size_t StorageEngine::prune_old_snapshots(int retention_days) {
     std::lock_guard<std::recursive_mutex> lock(db_mutex_);
     int64_t threshold_time = utils::current_timestamp() - (retention_days * 86400LL);
-    std::string sql = "DELETE FROM snapshots WHERE started_at < ?;";
+    std::string sql = "DELETE FROM snapshots WHERE started_at <= ?;";
     sqlite3_stmt *stmt = nullptr;
     size_t deleted = 0;
     if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -537,7 +538,43 @@ size_t StorageEngine::prune_old_snapshots(int retention_days) {
         }
         sqlite3_finalize(stmt);
     }
+
+    if (deleted > 0) {
+        // Clean up paths unreferenced by any snapshot metrics
+        purge_orphaned_paths();
+
+        // Reclaim free pages to the OS via incremental vacuum
+        execute_sql("PRAGMA incremental_vacuum;");
+    }
+
     return deleted;
+}
+
+size_t StorageEngine::purge_orphaned_paths() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
+    auto get_path_count = [this]() -> size_t {
+        sqlite3_stmt *cnt_stmt = nullptr;
+        size_t count = 0;
+        if (sqlite3_prepare_v2(db_, "SELECT COUNT(*) FROM paths;", -1, &cnt_stmt, nullptr) == SQLITE_OK) {
+            if (sqlite3_step(cnt_stmt) == SQLITE_ROW) {
+                count = static_cast<size_t>(sqlite3_column_int64(cnt_stmt, 0));
+            }
+            sqlite3_finalize(cnt_stmt);
+        }
+        return count;
+    };
+
+    size_t count_before = get_path_count();
+    std::string sql = "DELETE FROM paths WHERE id NOT IN (SELECT DISTINCT path_id FROM dir_metrics);";
+    execute_sql(sql);
+    size_t count_after = get_path_count();
+
+    return (count_before >= count_after) ? (count_before - count_after) : 0;
+}
+
+bool StorageEngine::vacuum() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex_);
+    return execute_sql("VACUUM;");
 }
 
 bool StorageEngine::clear_all_data() {

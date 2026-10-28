@@ -55,15 +55,18 @@ int main(int argc, char **argv) {
                   "    show                 - Print active configuration and monitored paths\n"
                   "    set-interval <time>  - Update scan interval. Valid range: 10m (600s) to 30d (2592000s)\n"
                   "                           Units supported: m, min, h, hr, d, day (e.g., 15m, 2h, 7d)\n"
+                  "    set-retention <days> - Update snapshot retention period in days (1 to 365)\n"
                   "    add-root <path>      - Add a target directory or mount point to monitor (e.g., /data)\n"
                   "    remove-root <path>   - Stop monitoring a directory path");
     std::string config_action = "show";
     std::string val1 = "";
     std::string val2 = "";
-    config_sub->add_option("action", config_action, "Config action: show | set-interval | add-root | remove-root")
-        ->check(CLI::IsMember({"show", "set-interval", "add-root", "remove-root"}))
+    config_sub
+        ->add_option("action", config_action,
+                     "Config action: show | set-interval | set-retention | add-root | remove-root")
+        ->check(CLI::IsMember({"show", "set-interval", "set-retention", "add-root", "remove-root"}))
         ->default_str("show");
-    config_sub->add_option("arg1", val1, "Value for action: interval duration (10m - 30d) or directory path");
+    config_sub->add_option("arg1", val1, "Value for action: interval duration, retention days, or directory path");
     config_sub->add_option("arg2", val2, "Optional second argument");
 
     // 4. clean
@@ -115,6 +118,7 @@ int main(int argc, char **argv) {
                "  grocycle config <action> [value]\n"
                "    show                 Display active configuration\n"
                "    set-interval <time>  Set scan frequency: 10m <= interval <= 30d (e.g. 15m, 1h, 14d)\n"
+               "    set-retention <days> Set snapshot retention in days: 1 <= days <= 365 (e.g. 7, 14, 30)\n"
                "    add-root <path>      Add directory/mount point to monitoring list\n"
                "    remove-root <path>   Remove directory from monitoring list\n\n"
                "  grocycle clean\n"

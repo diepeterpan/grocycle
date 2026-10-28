@@ -114,6 +114,7 @@ int run_service_command(const Config &cfg, const std::string &action, const std:
             std::cout << "  Scanning Now: " << (res.value("is_scanning", false) ? "YES" : "NO (Idle)") << std::endl;
             std::cout << "  Interval: " << utils::format_duration(res.value("scan_interval_seconds", 3600))
                       << std::endl;
+            std::cout << "  Retention: " << res.value("retention_days", 30) << " days" << std::endl;
             int64_t last_s = res.value("last_scan_time", 0);
             if (last_s > 0) {
                 std::cout << "  Last Scan: " << utils::format_timestamp(last_s) << std::endl;
@@ -194,6 +195,32 @@ int run_config_command(Config &cfg, const std::string &config_file, const std::s
         }
         std::cout << "Scan interval set to " << utils::format_duration(seconds) << "." << std::endl;
         return 0;
+    } else if (action == "set-retention") {
+        uint32_t days = 0;
+        try {
+            days = std::stoul(val1);
+        } catch (...) {
+            std::cerr << "Invalid retention days value: " << val1 << " (example: 7, 14, 30)" << std::endl;
+            return 1;
+        }
+        if (days < Config::MIN_RETENTION_DAYS || days > Config::MAX_RETENTION_DAYS) {
+            std::cerr << "Retention must be between 1 and 365 days." << std::endl;
+            return 1;
+        }
+
+        cfg.retention_days = days;
+        cfg.save_to_file(config_file);
+
+        if (client.is_daemon_running()) {
+            client.send_command({{"command", "set_retention"}, {"retention_days", days}});
+        } else {
+            db::StorageEngine storage(cfg.db_path);
+            if (storage.initialize()) {
+                storage.prune_old_snapshots(days);
+            }
+        }
+        std::cout << "Snapshot retention set to " << days << " days." << std::endl;
+        return 0;
     } else if (action == "add-root") {
         if (val1.empty()) {
             std::cerr << "Specify path to add: grocycle config add-root <path>" << std::endl;
@@ -233,9 +260,10 @@ int run_config_command(Config &cfg, const std::string &config_file, const std::s
         return 0;
     } else if (action == "show") {
         std::cout << "Grocycle Configuration (" << config_file << "):" << std::endl;
-        std::cout << "  Database: " << cfg.db_path << std::endl;
-        std::cout << "  Socket:   " << cfg.socket_path << std::endl;
-        std::cout << "  Interval: " << utils::format_duration(cfg.scan_interval_seconds) << std::endl;
+        std::cout << "  Database:  " << cfg.db_path << std::endl;
+        std::cout << "  Socket:    " << cfg.socket_path << std::endl;
+        std::cout << "  Interval:  " << utils::format_duration(cfg.scan_interval_seconds) << std::endl;
+        std::cout << "  Retention: " << cfg.retention_days << " days" << std::endl;
         std::cout << "  Monitored roots:" << std::endl;
         for (const auto &r : cfg.monitored_roots) {
             std::cout << "    - " << r << std::endl;
@@ -243,8 +271,8 @@ int run_config_command(Config &cfg, const std::string &config_file, const std::s
         return 0;
     }
 
-    std::cerr << "Unknown config action: " << action << ". Use show, set-interval, add-root, or remove-root."
-              << std::endl;
+    std::cerr << "Unknown config action: " << action
+              << ". Use show, set-interval, set-retention, add-root, or remove-root." << std::endl;
     return 1;
 }
 

@@ -107,6 +107,12 @@ public:
     // Maintenance: Prune snapshots older than retention days (default 30 days)
     size_t prune_old_snapshots(int retention_days = 30);
 
+    // Garbage collection: remove paths that have no associated metrics
+    size_t purge_orphaned_paths();
+
+    // Reclaim unused database space back to the filesystem
+    bool vacuum();
+
     // Completely wipe historical snapshots, metrics, and paths
     bool clear_all_data();
 

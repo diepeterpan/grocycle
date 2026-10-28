@@ -19,6 +19,10 @@ bool Config::validate(std::string &error_msg) const {
         error_msg = "Scan interval cannot exceed 30 days (2592000 seconds).";
         return false;
     }
+    if (retention_days < MIN_RETENTION_DAYS || retention_days > MAX_RETENTION_DAYS) {
+        error_msg = "Retention days must be between 1 and 365.";
+        return false;
+    }
     if (monitored_roots.empty()) {
         error_msg = "At least one monitored root directory must be specified.";
         return false;
@@ -63,6 +67,8 @@ Config Config::load_from_file(const std::string &path) {
                 cfg.log_file = j["log_file"];
             if (j.contains("scan_interval_seconds"))
                 cfg.scan_interval_seconds = j["scan_interval_seconds"];
+            if (j.contains("retention_days"))
+                cfg.retention_days = j["retention_days"];
             if (j.contains("sleep_every_n_dirs"))
                 cfg.sleep_every_n_dirs = j["sleep_every_n_dirs"];
             if (j.contains("sleep_duration_ms"))
@@ -97,6 +103,7 @@ bool Config::save_to_file(const std::string &path) const {
         j["socket_path"] = socket_path;
         j["log_file"] = log_file;
         j["scan_interval_seconds"] = scan_interval_seconds;
+        j["retention_days"] = retention_days;
         j["sleep_every_n_dirs"] = sleep_every_n_dirs;
         j["sleep_duration_ms"] = sleep_duration_ms;
         j["monitored_roots"] = monitored_roots;

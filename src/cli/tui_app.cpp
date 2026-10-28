@@ -305,6 +305,7 @@ int launch_tui(const Config &cfg) {
                 separator(),
                 hbox({text("Daemon Status: "), text(status_badge) | bold | color(d_color)}),
                 hbox({text("Scan Interval: "), text(utils::format_duration(cfg.scan_interval_seconds)) | bold}),
+                hbox({text("Retention:     "), text(std::to_string(cfg.retention_days) + " days") | bold}),
                 hbox({text("Last Scan:     "), text(last_scan_str) | color(Color::White)}),
                 hbox({text("Next Scan:     "), text(next_scan_str) | color(Color::White)})};
 

@@ -387,6 +387,7 @@ The system configuration file resides at `/etc/grocycle/config.json` (or `~/.con
 | `db_path` | String | `/var/lib/grocycle/grocycle.db` | Path to SQLite database file. |
 | `socket_path` | String | `/run/grocycle/grocycle.sock` | Unix domain socket for IPC commands. |
 | `scan_interval_seconds`| Integer| `3600` (1 hour) | Seconds between scans (Min: `600`, Max: `2592000`). |
+| `retention_days` | Integer | `30` | Snapshot retention period in days (Min: `1`, Max: `365`). |
 | `sleep_every_n_dirs` | Integer | `250` | Traversal batch threshold before sleeping. |
 | `sleep_duration_ms` | Integer | `15` | Sleep duration in milliseconds during traversal. |
 | `monitored_roots` | Array | `["/"]` | List of target filesystem roots to measure. |
@@ -414,7 +415,7 @@ sudo systemctl restart grocycle.service
 ## Troubleshooting & FAQ
 
 #### Q: How much disk space does the database consume?
-The SQLite database stores directory metrics with deduplicated paths. Historical snapshots older than 30 days are automatically pruned at the end of each scan. For typical systems, the database size remains under 20–50 MB.
+The SQLite database stores directory metrics with deduplicated paths. Historical snapshots older than `retention_days` (default: 30 days) are automatically pruned at the end of each scan, unreferenced paths are garbage-collected, and freed database pages are reclaimed to disk via incremental vacuuming. You can adjust the retention period dynamically via `grocycle config set-retention <days>`.
 
 #### Q: Can I run Grocycle without root?
 Yes. If run as an unprivileged user, Grocycle defaults to user-local paths:

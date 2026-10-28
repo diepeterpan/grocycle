@@ -15,6 +15,9 @@ struct Config {
     // Interval between scans (seconds). Range: 10 mins (600s) to 30 days (2592000s)
     uint32_t scan_interval_seconds = 3600; // 1 hour default
 
+    // Historical snapshot retention in days. Range: 1 to 365 days
+    uint32_t retention_days = 30; // 30 days default
+
     // Low-impact throttling
     uint32_t sleep_every_n_dirs = 250;
     uint32_t sleep_duration_ms = 15;
@@ -28,6 +31,8 @@ struct Config {
     // Limits
     static constexpr uint32_t MIN_INTERVAL_SECONDS = 600;     // 10 minutes
     static constexpr uint32_t MAX_INTERVAL_SECONDS = 2592000; // 30 days
+    static constexpr uint32_t MIN_RETENTION_DAYS = 1;         // 1 day
+    static constexpr uint32_t MAX_RETENTION_DAYS = 365;       // 1 year
 
     bool validate(std::string &error_msg) const;
     static Config load_from_file(const std::string &path);

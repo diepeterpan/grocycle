@@ -110,6 +110,7 @@ int main(int argc, char **argv) {
                     {"pid", getpid()},
                     {"is_scanning", g_is_scanning.load()},
                     {"scan_interval_seconds", cfg.scan_interval_seconds},
+                    {"retention_days", cfg.retention_days},
                     {"last_scan_time", last_scan_time},
                     {"next_scan_time", next_scan_time},
                     {"monitored_roots", cfg.monitored_roots},
@@ -138,6 +139,15 @@ int main(int argc, char **argv) {
             cfg.save_to_file(config_path);
             next_scan_time = last_scan_time + new_interval;
             return {{"status", "ok"}, {"interval_seconds", cfg.scan_interval_seconds}};
+        } else if (cmd == "set_retention") {
+            uint32_t days = req.value("retention_days", 0);
+            if (days < grocycle::Config::MIN_RETENTION_DAYS || days > grocycle::Config::MAX_RETENTION_DAYS) {
+                return {{"status", "error"}, {"message", "Retention must be between 1 and 365 days"}};
+            }
+            cfg.retention_days = days;
+            cfg.save_to_file(config_path);
+            storage.prune_old_snapshots(cfg.retention_days);
+            return {{"status", "ok"}, {"retention_days", cfg.retention_days}};
         } else if (cmd == "add_root") {
             std::string root = req.value("path", "");
             if (root.empty())
@@ -208,8 +218,8 @@ int main(int argc, char **argv) {
                 scanner.scan_root(r.id, r.path, cancel_scan);
             }
 
-            // Prune snapshots older than 30 days
-            storage.prune_old_snapshots(30);
+            // Prune snapshots older than configured retention days
+            storage.prune_old_snapshots(cfg.retention_days);
 
             last_scan_time = grocycle::utils::current_timestamp();
             next_scan_time = last_scan_time + cfg.scan_interval_seconds;
