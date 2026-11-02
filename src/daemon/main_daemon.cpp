@@ -88,7 +88,8 @@ int main(int argc, char **argv) {
         while (!existing_pid.empty() && (existing_pid.back() == '\n' || existing_pid.back() == ' ')) {
             existing_pid.pop_back();
         }
-        std::cerr << "Error: Another instance of grocycled is already running (PID: " << existing_pid << ")." << std::endl;
+        std::cerr << "Error: Another instance of grocycled is already running (PID: " << existing_pid << ")."
+                  << std::endl;
         close(lock_fd);
         return 1;
     }

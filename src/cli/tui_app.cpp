@@ -27,9 +27,8 @@ struct WindowOption {
     uint32_t seconds;
 };
 
-const std::vector<WindowOption> kWindowOptions = {{"10m", 600},     {"1h", 3600},   {"6h", 21600},
-                                                  {"24h", 86400},   {"7d", 604800}, {"30d", 2592000},
-                                                  {"custom", 0}};
+const std::vector<WindowOption> kWindowOptions = {{"10m", 600},   {"1h", 3600},     {"6h", 21600}, {"24h", 86400},
+                                                  {"7d", 604800}, {"30d", 2592000}, {"custom", 0}};
 
 enum class SortMode { GrowthDelta, GrowthRate, TotalSize, Alphabetical };
 
@@ -85,9 +84,8 @@ int launch_tui(const Config &cfg) {
         modal_snapshot_labels.clear();
         for (const auto &s : modal_snapshots) {
             std::ostringstream ss;
-            ss << "#" << s.id << " — " << utils::format_timestamp(s.started_at)
-               << " (" << utils::format_bytes(s.total_allocated_bytes) << ", "
-               << s.total_inodes << " inodes)";
+            ss << "#" << s.id << " — " << utils::format_timestamp(s.started_at) << " ("
+               << utils::format_bytes(s.total_allocated_bytes) << ", " << s.total_inodes << " inodes)";
             modal_snapshot_labels.push_back(ss.str());
         }
         if (modal_snapshots.size() >= 2) {
@@ -128,8 +126,10 @@ int launch_tui(const Config &cfg) {
 
             auto s1 = storage.get_snapshot_near_timestamp(current_root_id, 0); // fallback or find by id
             for (const auto &s : modal_snapshots) {
-                if (s.id == earlier_snap_id) earlier_snap_ts = s.started_at;
-                if (s.id == later_snap_id) later_snap_ts = s.started_at;
+                if (s.id == earlier_snap_id)
+                    earlier_snap_ts = s.started_at;
+                if (s.id == later_snap_id)
+                    later_snap_ts = s.started_at;
             }
         } else {
             auto latest_snap = storage.get_latest_snapshot(current_root_id);
@@ -300,17 +300,15 @@ int launch_tui(const Config &cfg) {
                              text("Sort: [G]rowth | [R]ate | [S]ize | [N]ame") | dim});
 
         // Date range display line below Window selector
-        std::string start_date_str = (current_earlier_snap_ts > 0) ? utils::format_timestamp(current_earlier_snap_ts) : "N/A";
+        std::string start_date_str =
+            (current_earlier_snap_ts > 0) ? utils::format_timestamp(current_earlier_snap_ts) : "N/A";
         std::string end_date_str = (current_later_snap_ts > 0) ? utils::format_timestamp(current_later_snap_ts) : "N/A";
 
-        Element dates_line = hbox({
-            text("Range:  ") | bold | color(Color::Cyan),
-            text(start_date_str) | color(Color::YellowLight),
-            text(" (#" + std::to_string(current_earlier_snap_id) + ")") | dim,
-            text("  ->  ") | bold | color(Color::White),
-            text(end_date_str) | color(Color::YellowLight),
-            text(" (#" + std::to_string(current_later_snap_id) + ")") | dim
-        });
+        Element dates_line =
+            hbox({text("Range:  ") | bold | color(Color::Cyan), text(start_date_str) | color(Color::YellowLight),
+                  text(" (#" + std::to_string(current_earlier_snap_id) + ")") | dim,
+                  text("  ->  ") | bold | color(Color::White), text(end_date_str) | color(Color::YellowLight),
+                  text(" (#" + std::to_string(current_later_snap_id) + ")") | dim});
 
         // Table Columns Header
         auto col_headers =
@@ -471,15 +469,13 @@ int launch_tui(const Config &cfg) {
     auto start_dropdown = Dropdown(&modal_snapshot_labels, &modal_selected_start_idx);
     auto end_dropdown = Dropdown(&modal_snapshot_labels, &modal_selected_end_idx);
 
-    auto btn_apply = Button("  Apply Comparison  ", [&] {
+    auto do_apply_custom_comparison = [&] {
         if (modal_snapshots.empty()) {
             modal_error_msg = "No snapshots recorded yet.";
             return;
         }
-        if (modal_selected_start_idx < 0 ||
-            modal_selected_start_idx >= static_cast<int>(modal_snapshots.size()) ||
-            modal_selected_end_idx < 0 ||
-            modal_selected_end_idx >= static_cast<int>(modal_snapshots.size())) {
+        if (modal_selected_start_idx < 0 || modal_selected_start_idx >= static_cast<int>(modal_snapshots.size()) ||
+            modal_selected_end_idx < 0 || modal_selected_end_idx >= static_cast<int>(modal_snapshots.size())) {
             modal_error_msg = "Please select valid snapshots.";
             return;
         }
@@ -501,11 +497,11 @@ int launch_tui(const Config &cfg) {
         selected_window_idx = 6; // [7:custom]
         show_custom_modal = false;
         refresh_data();
-    });
+    };
 
-    auto btn_cancel = Button("  Cancel  ", [&] {
-        show_custom_modal = false;
-    });
+    auto btn_apply = Button("  [A] Apply Comparison  ", do_apply_custom_comparison);
+
+    auto btn_cancel = Button("  [C/ESC] Cancel  ", [&] { show_custom_modal = false; });
 
     auto modal_buttons = Container::Horizontal({btn_apply, btn_cancel});
     auto modal_container = Container::Vertical({start_dropdown, end_dropdown, modal_buttons});
@@ -516,8 +512,8 @@ int launch_tui(const Config &cfg) {
         modal_els.push_back(separator());
 
         if (modal_snapshots.size() < 2) {
-            modal_els.push_back(
-                text("At least 2 completed scans are required to compare custom dates.") | color(Color::YellowLight));
+            modal_els.push_back(text("At least 2 completed scans are required to compare custom dates.") |
+                                color(Color::YellowLight));
             modal_els.push_back(separator());
             modal_els.push_back(hbox({filler(), btn_cancel->Render(), filler()}));
         } else {
@@ -532,18 +528,15 @@ int launch_tui(const Config &cfg) {
             modal_els.push_back(end_dropdown->Render());
             modal_els.push_back(text(""));
 
-            if (modal_selected_start_idx >= 0 &&
-                modal_selected_start_idx < static_cast<int>(modal_snapshots.size()) &&
-                modal_selected_end_idx >= 0 &&
-                modal_selected_end_idx < static_cast<int>(modal_snapshots.size())) {
+            if (modal_selected_start_idx >= 0 && modal_selected_start_idx < static_cast<int>(modal_snapshots.size()) &&
+                modal_selected_end_idx >= 0 && modal_selected_end_idx < static_cast<int>(modal_snapshots.size())) {
                 const auto &s1 = modal_snapshots[modal_selected_start_idx];
                 const auto &s2 = modal_snapshots[modal_selected_end_idx];
                 if (s1.started_at < s2.started_at) {
                     int64_t dt = s2.started_at - s1.started_at;
-                    modal_els.push_back(hbox({
-                        text("Time Difference: ") | bold,
-                        text(utils::format_duration(static_cast<uint32_t>(dt))) | color(Color::GreenLight) | bold
-                    }));
+                    modal_els.push_back(hbox(
+                        {text("Time Difference: ") | bold,
+                         text(utils::format_duration(static_cast<uint32_t>(dt))) | color(Color::GreenLight) | bold}));
                 }
             }
 
@@ -566,8 +559,12 @@ int launch_tui(const Config &cfg) {
     // Wrap with CatchEvent decorator
     auto component = CatchEvent(root_with_modal, [&](Event event) {
         if (show_custom_modal) {
-            if (event == Event::Escape) {
+            if (event == Event::Escape || event == Event::Character('c') || event == Event::Character('C')) {
                 show_custom_modal = false;
+                return true;
+            }
+            if (event == Event::Character('a') || event == Event::Character('A')) {
+                do_apply_custom_comparison();
                 return true;
             }
             return false;

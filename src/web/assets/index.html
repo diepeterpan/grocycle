@@ -277,10 +277,29 @@
       }
     }
 
-    // Right-click: Navigate Up / Back (Backspace)
+    // Helper to check if a modal is visible in current terminal buffer
+    function getActiveModalType() {
+      const buffer = term.buffer.active;
+      for (let r = 0; r < term.rows; ++r) {
+        const l = buffer.getLine(r);
+        if (l) {
+          const s = l.translateToString(true);
+          if (s.includes('Custom Snapshot Comparison')) return 'custom';
+          if (s.includes('Daemon Control & Configuration')) return 'settings';
+        }
+      }
+      return null;
+    }
+
+    // Right-click: Close modal if open; otherwise Navigate Up / Back (Backspace)
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      sendTerminalKey('\x7f');
+      const modal = getActiveModalType();
+      if (modal) {
+        sendTerminalKey('\x1b'); // Escape closes modals
+      } else {
+        sendTerminalKey('\x7f'); // Backspace navigates back up directory tree
+      }
     });
 
     // Native xterm.js LinkProvider for pixel-perfect left clicks & hover cursor
@@ -318,6 +337,98 @@
         }
 
         const rowIdx = bufferLineNumber - 1;
+        const activeModal = getActiveModalType();
+
+        // =====================================================================
+        // MODAL 1: Custom Snapshot Comparison
+        // =====================================================================
+        if (activeModal === 'custom') {
+          // 1. Apply Comparison Button: [A] Apply Comparison
+          const applyIdx = lineStr.indexOf('Apply Comparison');
+          if (applyIdx !== -1) {
+            // Find boundaries of button label
+            const startX = Math.max(0, lineStr.lastIndexOf('[', applyIdx));
+            const endX = lineStr.indexOf(']', applyIdx) !== -1 ? lineStr.indexOf(']', applyIdx) + 1 : applyIdx + 16;
+            addLink(startX + 1, endX, lineStr.substring(startX, endX), () => sendTerminalKey('a'));
+          }
+
+          // 2. Cancel Button: [C/ESC] Cancel
+          const cancelIdx = lineStr.indexOf('Cancel');
+          if (cancelIdx !== -1) {
+            const startX = Math.max(0, lineStr.lastIndexOf('[', cancelIdx));
+            const endX = lineStr.indexOf(']', cancelIdx) !== -1 ? lineStr.indexOf(']', cancelIdx) + 1 : cancelIdx + 6;
+            addLink(startX + 1, endX, lineStr.substring(startX, endX), () => sendTerminalKey('\x1b'));
+          }
+
+          // 3. Dropdown Header Boxes (Start Scan / End Scan)
+          // Lines with '↓ #' or '→ #' or '↓   ' or dropdown closed box
+          if (lineStr.includes('↓ #') || lineStr.includes('→ #') || lineStr.includes('↓ [') || lineStr.includes('→ [')) {
+            addLink(1, term.cols, lineStr, () => {
+              // Toggle dropdown by sending Enter
+              sendTerminalKey('\r');
+            });
+          }
+
+          // 4. Dropdown List Items: e.g. "o #3 - 2026-11-02..." or "• #4..." or "* #4..."
+          if (lineStr.includes('#') && (lineStr.includes('o #') || lineStr.includes('• #') || lineStr.includes('O #') || lineStr.includes('● #') || lineStr.includes('(*)') || lineStr.includes('( )'))) {
+            addLink(1, term.cols, lineStr, () => {
+              // Find the currently selected option in the list
+              let focusedRow = -1;
+              for (let r = 0; r < term.rows; ++r) {
+                const l = buffer.getLine(r);
+                if (l) {
+                  const s = l.translateToString(true);
+                  if (s.includes('● #') || s.includes('• #') || s.includes('(*)')) {
+                    focusedRow = r;
+                    break;
+                  }
+                }
+              }
+
+              if (focusedRow !== -1) {
+                const delta = rowIdx - focusedRow;
+                let arrowKeys = '';
+                if (delta > 0) {
+                  arrowKeys = '\x1b[B'.repeat(delta); // Down
+                } else if (delta < 0) {
+                  arrowKeys = '\x1b[A'.repeat(-delta); // Up
+                }
+                sendTerminalKey(arrowKeys + '\r');
+              } else {
+                sendTerminalKey('\r');
+              }
+            });
+          }
+
+          callback(links);
+          return;
+        }
+
+        // =====================================================================
+        // MODAL 2: Settings / Daemon Configuration
+        // =====================================================================
+        if (activeModal === 'settings') {
+          // Trigger scan now
+          if (lineStr.includes('[S] Trigger Scan Now') || lineStr.includes('Trigger Scan Now')) {
+            const idx = lineStr.indexOf('Trigger Scan Now');
+            const startX = Math.max(0, lineStr.lastIndexOf('[', idx));
+            addLink(startX + 1, idx + 16, '[S] Trigger Scan Now', () => sendTerminalKey('s'));
+          }
+
+          // Close this dialog
+          if (lineStr.includes('Close this dialog') || lineStr.includes('[ESC/M]')) {
+            const idx = lineStr.indexOf('Close this dialog');
+            const startX = Math.max(0, lineStr.lastIndexOf('[', idx));
+            addLink(startX + 1, idx + 17, '[ESC/M] Close this dialog', () => sendTerminalKey('\x1b'));
+          }
+
+          callback(links);
+          return;
+        }
+
+        // =====================================================================
+        // NORMAL MAIN EXPLORER VIEW (No modal active)
+        // =====================================================================
 
         // Line 0: Header shortcuts ([M/F2: Settings], [Q: Quit])
         if (rowIdx === 0) {
