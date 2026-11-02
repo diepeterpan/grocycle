@@ -105,33 +105,62 @@ int launch_tui(const Config &cfg) {
     std::string status_msg = "Ready. Use Up/Down, Enter to drill down, Backspace to go up.";
 
     auto screen = ScreenInteractive::Fullscreen();
+    screen.TrackMouse(false);
     ipc::SocketClient client(cfg.socket_path);
 
     std::vector<db::GrowthEntry> items;
+    int64_t current_earlier_snap_ts = 0;
+    int64_t current_later_snap_ts = 0;
+    int64_t current_earlier_snap_id = 0;
+    int64_t current_later_snap_id = 0;
 
     auto refresh_data = [&]() {
         int64_t earlier_snap_id = 0;
         int64_t later_snap_id = 0;
+        int64_t earlier_snap_ts = 0;
+        int64_t later_snap_ts = 0;
         std::string range_label = "";
 
         if (selected_window_idx == 6 && custom_start_snap_id > 0 && custom_end_snap_id > 0) {
             earlier_snap_id = custom_start_snap_id;
             later_snap_id = custom_end_snap_id;
             range_label = custom_range_summary;
+
+            auto s1 = storage.get_snapshot_near_timestamp(current_root_id, 0); // fallback or find by id
+            for (const auto &s : modal_snapshots) {
+                if (s.id == earlier_snap_id) earlier_snap_ts = s.started_at;
+                if (s.id == later_snap_id) later_snap_ts = s.started_at;
+            }
         } else {
             auto latest_snap = storage.get_latest_snapshot(current_root_id);
             if (!latest_snap.has_value()) {
                 items.clear();
+                current_earlier_snap_ts = 0;
+                current_later_snap_ts = 0;
+                current_earlier_snap_id = 0;
+                current_later_snap_id = 0;
                 status_msg = "No completed snapshots found yet. Waiting for initial scan...";
                 return;
             }
 
             later_snap_id = latest_snap->id;
+            later_snap_ts = latest_snap->started_at;
             uint32_t win_sec = kWindowOptions[selected_window_idx].seconds;
             int64_t target_time = latest_snap->started_at - win_sec;
             auto earlier_snap = storage.get_snapshot_near_timestamp(current_root_id, target_time);
-            earlier_snap_id = earlier_snap.has_value() ? earlier_snap->id : latest_snap->id;
+            if (earlier_snap.has_value()) {
+                earlier_snap_id = earlier_snap->id;
+                earlier_snap_ts = earlier_snap->started_at;
+            } else {
+                earlier_snap_id = latest_snap->id;
+                earlier_snap_ts = latest_snap->started_at;
+            }
         }
+
+        current_earlier_snap_id = earlier_snap_id;
+        current_later_snap_id = later_snap_id;
+        current_earlier_snap_ts = earlier_snap_ts;
+        current_later_snap_ts = later_snap_ts;
 
         items = storage.get_children_growth(current_root_id, earlier_snap_id, later_snap_id, current_path_id);
 
@@ -180,8 +209,8 @@ int launch_tui(const Config &cfg) {
     auto main_renderer = Renderer([&] {
         // Find terminal dimension
         int term_height = screen.dimy();
-        // Reserve rows for header (2), path (1), toolbar (1), separator (2), table header (1), footer (2)
-        int visible_rows = std::max(5, term_height - 9);
+        // Reserve rows for header (2), path (1), toolbar (1), dates (1), separator (2), table header (1), footer (2)
+        int visible_rows = std::max(5, term_height - 10);
 
         // Adjust scroll offset to keep selected_item visible
         if (selected_item < scroll_offset) {
@@ -247,7 +276,7 @@ int launch_tui(const Config &cfg) {
         auto header =
             hbox({text(" GROCYCLE ") | bold | bgcolor(Color::Blue) | color(Color::White),
                   text(ver_badge) | bold | color(Color::YellowLight), text("Linux Directory Growth Explorer ") | dim,
-                  filler(), text("[C: Custom Range] [M/F2: Settings] [Q: Quit] ") | color(Color::Cyan)});
+                  filler(), text("[M/F2: Settings] [Q: Quit] ") | color(Color::Cyan)});
 
         // Path Breadcrumb
         auto breadcrumbs =
@@ -270,6 +299,19 @@ int launch_tui(const Config &cfg) {
         auto toolbar = hbox({text("Window: ") | bold, hbox(std::move(win_tabs)), filler(),
                              text("Sort: [G]rowth | [R]ate | [S]ize | [N]ame") | dim});
 
+        // Date range display line below Window selector
+        std::string start_date_str = (current_earlier_snap_ts > 0) ? utils::format_timestamp(current_earlier_snap_ts) : "N/A";
+        std::string end_date_str = (current_later_snap_ts > 0) ? utils::format_timestamp(current_later_snap_ts) : "N/A";
+
+        Element dates_line = hbox({
+            text("Range:  ") | bold | color(Color::Cyan),
+            text(start_date_str) | color(Color::YellowLight),
+            text(" (#" + std::to_string(current_earlier_snap_id) + ")") | dim,
+            text("  ->  ") | bold | color(Color::White),
+            text(end_date_str) | color(Color::YellowLight),
+            text(" (#" + std::to_string(current_later_snap_id) + ")") | dim
+        });
+
         // Table Columns Header
         auto col_headers =
             hbox({text("  Directory Name") | bold | flex, text("Current Size") | bold | size(WIDTH, EQUAL, 14),
@@ -284,7 +326,7 @@ int launch_tui(const Config &cfg) {
         auto footer = hbox({text(status_msg) | color(Color::White) | dim, text(pos_info) | bold | color(Color::Cyan),
                             filler(), text("Enter: Drilldown | Backspace: Up | Arrows: Move") | dim});
 
-        auto main_view = vbox({header, separator(), breadcrumbs, toolbar, separator(), col_headers,
+        auto main_view = vbox({header, separator(), breadcrumbs, toolbar, dates_line, separator(), col_headers,
                                vbox(std::move(rows)) | yflex, separator(), footer});
 
         if (show_settings_modal) {

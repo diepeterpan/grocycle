@@ -13,6 +13,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -60,6 +63,40 @@ int main(int argc, char **argv) {
             std::cerr << "Failed to daemonize process" << std::endl;
             return 1;
         }
+    }
+
+    // Single-instance process lock via advisory lock on PID file
+    std::string pid_dir = std::filesystem::path(cfg.socket_path).parent_path().string();
+    if (pid_dir.empty()) {
+        pid_dir = "/run/grocycle";
+    }
+    std::string pid_file_path = pid_dir + "/grocycled.pid";
+    grocycle::utils::ensure_parent_dir(pid_file_path);
+
+    int lock_fd = open(pid_file_path.c_str(), O_RDWR | O_CREAT, 0644);
+    if (lock_fd < 0) {
+        std::cerr << "Failed to open pid lock file: " << pid_file_path << " (" << strerror(errno) << ")" << std::endl;
+        return 1;
+    }
+
+    if (flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+        // Another instance holds the lock
+        char existing_pid_buf[32] = {0};
+        ssize_t bytes_read = read(lock_fd, existing_pid_buf, sizeof(existing_pid_buf) - 1);
+        std::string existing_pid = (bytes_read > 0) ? std::string(existing_pid_buf) : "unknown";
+        // Trim trailing newline or whitespace
+        while (!existing_pid.empty() && (existing_pid.back() == '\n' || existing_pid.back() == ' ')) {
+            existing_pid.pop_back();
+        }
+        std::cerr << "Error: Another instance of grocycled is already running (PID: " << existing_pid << ")." << std::endl;
+        close(lock_fd);
+        return 1;
+    }
+
+    // Write current PID to lockfile
+    if (ftruncate(lock_fd, 0) == 0) {
+        std::string pid_str = std::to_string(getpid()) + "\n";
+        (void)write(lock_fd, pid_str.c_str(), pid_str.size());
     }
 
     // Apply low I/O & CPU priority
@@ -234,6 +271,11 @@ int main(int argc, char **argv) {
 
     server.stop();
     storage.close();
+    if (lock_fd >= 0) {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        unlink(pid_file_path.c_str());
+    }
     std::cout << "grocycled stopped." << std::endl;
     return 0;
 }
