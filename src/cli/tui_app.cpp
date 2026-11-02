@@ -27,8 +27,9 @@ struct WindowOption {
     uint32_t seconds;
 };
 
-const std::vector<WindowOption> kWindowOptions = {{"10m", 600},   {"1h", 3600},   {"6h", 21600},
-                                                  {"24h", 86400}, {"7d", 604800}, {"30d", 2592000}};
+const std::vector<WindowOption> kWindowOptions = {{"10m", 600},     {"1h", 3600},   {"6h", 21600},
+                                                  {"24h", 86400},   {"7d", 604800}, {"30d", 2592000},
+                                                  {"custom", 0}};
 
 enum class SortMode { GrowthDelta, GrowthRate, TotalSize, Alphabetical };
 
@@ -66,6 +67,41 @@ int launch_tui(const Config &cfg) {
     int selected_item = 0;
     int scroll_offset = 0; // Viewport top index
     bool show_settings_modal = false;
+    bool show_custom_modal = false;
+
+    // Custom snapshot comparison state
+    int64_t custom_start_snap_id = -1;
+    int64_t custom_end_snap_id = -1;
+    std::string custom_range_summary = "";
+
+    std::vector<db::SnapshotRecord> modal_snapshots;
+    std::vector<std::string> modal_snapshot_labels;
+    int modal_selected_start_idx = 0;
+    int modal_selected_end_idx = 0;
+    std::string modal_error_msg = "";
+
+    auto load_snapshots_for_modal = [&]() {
+        modal_snapshots = storage.get_recent_snapshots(current_root_id, 100);
+        modal_snapshot_labels.clear();
+        for (const auto &s : modal_snapshots) {
+            std::ostringstream ss;
+            ss << "#" << s.id << " — " << utils::format_timestamp(s.started_at)
+               << " (" << utils::format_bytes(s.total_allocated_bytes) << ", "
+               << s.total_inodes << " inodes)";
+            modal_snapshot_labels.push_back(ss.str());
+        }
+        if (modal_snapshots.size() >= 2) {
+            modal_selected_start_idx = 1; // 2nd newest as baseline
+            modal_selected_end_idx = 0;   // newest as target
+        } else {
+            modal_selected_start_idx = 0;
+            modal_selected_end_idx = 0;
+        }
+        modal_error_msg.clear();
+    };
+
+    load_snapshots_for_modal();
+
     std::string status_msg = "Ready. Use Up/Down, Enter to drill down, Backspace to go up.";
 
     auto screen = ScreenInteractive::Fullscreen();
@@ -74,19 +110,30 @@ int launch_tui(const Config &cfg) {
     std::vector<db::GrowthEntry> items;
 
     auto refresh_data = [&]() {
-        auto latest_snap = storage.get_latest_snapshot(current_root_id);
-        if (!latest_snap.has_value()) {
-            items.clear();
-            status_msg = "No completed snapshots found yet. Waiting for initial scan...";
-            return;
+        int64_t earlier_snap_id = 0;
+        int64_t later_snap_id = 0;
+        std::string range_label = "";
+
+        if (selected_window_idx == 6 && custom_start_snap_id > 0 && custom_end_snap_id > 0) {
+            earlier_snap_id = custom_start_snap_id;
+            later_snap_id = custom_end_snap_id;
+            range_label = custom_range_summary;
+        } else {
+            auto latest_snap = storage.get_latest_snapshot(current_root_id);
+            if (!latest_snap.has_value()) {
+                items.clear();
+                status_msg = "No completed snapshots found yet. Waiting for initial scan...";
+                return;
+            }
+
+            later_snap_id = latest_snap->id;
+            uint32_t win_sec = kWindowOptions[selected_window_idx].seconds;
+            int64_t target_time = latest_snap->started_at - win_sec;
+            auto earlier_snap = storage.get_snapshot_near_timestamp(current_root_id, target_time);
+            earlier_snap_id = earlier_snap.has_value() ? earlier_snap->id : latest_snap->id;
         }
 
-        uint32_t win_sec = kWindowOptions[selected_window_idx].seconds;
-        int64_t target_time = latest_snap->started_at - win_sec;
-        auto earlier_snap = storage.get_snapshot_near_timestamp(current_root_id, target_time);
-        int64_t earlier_snap_id = earlier_snap.has_value() ? earlier_snap->id : latest_snap->id;
-
-        items = storage.get_children_growth(current_root_id, earlier_snap_id, latest_snap->id, current_path_id);
+        items = storage.get_children_growth(current_root_id, earlier_snap_id, later_snap_id, current_path_id);
 
         // Sort items
         std::sort(items.begin(), items.end(), [&](const db::GrowthEntry &a, const db::GrowthEntry &b) {
@@ -119,14 +166,18 @@ int launch_tui(const Config &cfg) {
 
         std::ostringstream ss;
         ss << "Viewing: " << (path_name_stack.empty() ? "/" : path_name_stack.back()) << " | Snapshots: #"
-           << earlier_snap_id << " -> #" << latest_snap->id << " (" << items.size() << " entries)";
+           << earlier_snap_id << " -> #" << later_snap_id;
+        if (!range_label.empty()) {
+            ss << " (" << range_label << ")";
+        }
+        ss << " [" << items.size() << " entries]";
         status_msg = ss.str();
     };
 
     refresh_data();
 
-    // Create a base renderer component
-    auto renderer = Renderer([&] {
+    // Create base main renderer component
+    auto main_renderer = Renderer([&] {
         // Find terminal dimension
         int term_height = screen.dimy();
         // Reserve rows for header (2), path (1), toolbar (1), separator (2), table header (1), footer (2)
@@ -196,7 +247,7 @@ int launch_tui(const Config &cfg) {
         auto header =
             hbox({text(" GROCYCLE ") | bold | bgcolor(Color::Blue) | color(Color::White),
                   text(ver_badge) | bold | color(Color::YellowLight), text("Linux Directory Growth Explorer ") | dim,
-                  filler(), text("[M/F2: Daemon Settings] [Q: Quit] ") | color(Color::Cyan)});
+                  filler(), text("[C: Custom Range] [M/F2: Settings] [Q: Quit] ") | color(Color::Cyan)});
 
         // Path Breadcrumb
         auto breadcrumbs =
@@ -374,8 +425,111 @@ int launch_tui(const Config &cfg) {
         return main_view;
     });
 
+    // Custom comparison modal components
+    auto start_dropdown = Dropdown(&modal_snapshot_labels, &modal_selected_start_idx);
+    auto end_dropdown = Dropdown(&modal_snapshot_labels, &modal_selected_end_idx);
+
+    auto btn_apply = Button("  Apply Comparison  ", [&] {
+        if (modal_snapshots.empty()) {
+            modal_error_msg = "No snapshots recorded yet.";
+            return;
+        }
+        if (modal_selected_start_idx < 0 ||
+            modal_selected_start_idx >= static_cast<int>(modal_snapshots.size()) ||
+            modal_selected_end_idx < 0 ||
+            modal_selected_end_idx >= static_cast<int>(modal_snapshots.size())) {
+            modal_error_msg = "Please select valid snapshots.";
+            return;
+        }
+
+        const auto &start_snap = modal_snapshots[modal_selected_start_idx];
+        const auto &end_snap = modal_snapshots[modal_selected_end_idx];
+
+        if (start_snap.started_at >= end_snap.started_at) {
+            modal_error_msg = "Error: Start scan must be strictly earlier than End scan.";
+            return;
+        }
+
+        custom_start_snap_id = start_snap.id;
+        custom_end_snap_id = end_snap.id;
+
+        int64_t diff_sec = end_snap.started_at - start_snap.started_at;
+        custom_range_summary = utils::format_duration(static_cast<uint32_t>(diff_sec));
+
+        selected_window_idx = 6; // [7:custom]
+        show_custom_modal = false;
+        refresh_data();
+    });
+
+    auto btn_cancel = Button("  Cancel  ", [&] {
+        show_custom_modal = false;
+    });
+
+    auto modal_buttons = Container::Horizontal({btn_apply, btn_cancel});
+    auto modal_container = Container::Vertical({start_dropdown, end_dropdown, modal_buttons});
+
+    auto custom_modal_renderer = Renderer(modal_container, [&] {
+        Elements modal_els;
+        modal_els.push_back(text(" Custom Snapshot Comparison ") | bold | center | color(Color::Cyan));
+        modal_els.push_back(separator());
+
+        if (modal_snapshots.size() < 2) {
+            modal_els.push_back(
+                text("At least 2 completed scans are required to compare custom dates.") | color(Color::YellowLight));
+            modal_els.push_back(separator());
+            modal_els.push_back(hbox({filler(), btn_cancel->Render(), filler()}));
+        } else {
+            modal_els.push_back(text("Select two completed scans from database history:") | dim);
+            modal_els.push_back(text(""));
+
+            modal_els.push_back(text("Start Scan (Earlier / Baseline):") | bold | color(Color::White));
+            modal_els.push_back(start_dropdown->Render());
+            modal_els.push_back(text(""));
+
+            modal_els.push_back(text("End Scan (Later / Target):") | bold | color(Color::White));
+            modal_els.push_back(end_dropdown->Render());
+            modal_els.push_back(text(""));
+
+            if (modal_selected_start_idx >= 0 &&
+                modal_selected_start_idx < static_cast<int>(modal_snapshots.size()) &&
+                modal_selected_end_idx >= 0 &&
+                modal_selected_end_idx < static_cast<int>(modal_snapshots.size())) {
+                const auto &s1 = modal_snapshots[modal_selected_start_idx];
+                const auto &s2 = modal_snapshots[modal_selected_end_idx];
+                if (s1.started_at < s2.started_at) {
+                    int64_t dt = s2.started_at - s1.started_at;
+                    modal_els.push_back(hbox({
+                        text("Time Difference: ") | bold,
+                        text(utils::format_duration(static_cast<uint32_t>(dt))) | color(Color::GreenLight) | bold
+                    }));
+                }
+            }
+
+            if (!modal_error_msg.empty()) {
+                modal_els.push_back(text(modal_error_msg) | color(Color::RedLight) | bold);
+            }
+
+            modal_els.push_back(separator());
+            modal_els.push_back(hbox({filler(), btn_apply->Render(), text("   "), btn_cancel->Render(), filler()}));
+            modal_els.push_back(separator());
+            modal_els.push_back(text("Tab: Switch field | Enter: Toggle dropdown | Esc: Close") | dim | center);
+        }
+
+        return vbox(std::move(modal_els)) | size(WIDTH, EQUAL, 72) | bgcolor(Color::RGB(20, 20, 24)) |
+               color(Color::White) | borderHeavy | color(Color::Cyan) | clear_under;
+    });
+
+    auto root_with_modal = Modal(main_renderer, custom_modal_renderer, &show_custom_modal);
+
     // Wrap with CatchEvent decorator
-    auto component = CatchEvent(renderer, [&](Event event) {
+    auto component = CatchEvent(root_with_modal, [&](Event event) {
+        if (show_custom_modal) {
+            if (event == Event::Escape) {
+                show_custom_modal = false;
+                return true;
+            }
+            return false;
+        }
         if (show_settings_modal) {
             if (event == Event::Escape || event == Event::Character('q') || event == Event::Character('m')) {
                 show_settings_modal = false;
@@ -473,6 +627,11 @@ int launch_tui(const Config &cfg) {
         if (event == Event::Character('6')) {
             selected_window_idx = 5;
             refresh_data();
+            return true;
+        }
+        if (event == Event::Character('7') || event == Event::Character('c') || event == Event::Character('C')) {
+            load_snapshots_for_modal();
+            show_custom_modal = true;
             return true;
         }
 

@@ -225,6 +225,7 @@ Viewing: /var/log | Snapshots: #12 -> #13 (4 entries)   Enter: Drilldown | Backs
 | `Enter` / `Right` or `l` | **Drill down** into selected directory |
 | `Backspace` / `Left` or `h` | **Go up** to parent directory |
 | `1` – `6` | Quick-switch time window (`10m`, `1h`, `6h`, `24h`, `7d`, `30d`) |
+| `7` / `C` | Open **Custom Snapshot Comparison** modal (`[7:custom]`) |
 | `G` / `g` | Sort by **Absolute Growth Delta** (Default) |
 | `R` / `r` | Sort by **Growth Rate** (Bytes per hour) |
 | `S` / `s` | Sort by **Current Total Size** |
