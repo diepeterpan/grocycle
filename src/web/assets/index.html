@@ -283,117 +283,124 @@
       sendTerminalKey('\x7f');
     });
 
-    // Left-click: Drilldown on row or click shortcut
-    container.addEventListener('click', (e) => {
-      const xtermScreen = container.querySelector('.xterm-screen') || container;
-      const targetRect = xtermScreen.getBoundingClientRect();
-      const clickX = e.clientX - targetRect.left;
-      const clickY = e.clientY - targetRect.top;
-
-      if (clickX < 0 || clickY < 0 || targetRect.width <= 0 || targetRect.height <= 0) return;
-
-      const cellWidth = targetRect.width / term.cols;
-      const cellHeight = targetRect.height / term.rows;
-
-      if (!cellWidth || !cellHeight) return;
-
-      const col = Math.floor(clickX / cellWidth);
-      const row = Math.floor(clickY / cellHeight);
-
-      if (row < 0 || row >= term.rows || col < 0 || col >= term.cols) return;
-
-      const buffer = term.buffer.active;
-      const line = buffer.getLine(row);
-      if (!line) return;
-      const lineStr = line.translateToString(true);
-
-      // Line 0: Header bar shortcuts (e.g. [M/F2: Settings], [Q: Quit])
-      if (row === 0) {
-        if (lineStr.includes('[M/F2: Settings]') || lineStr.includes('[M: Settings]')) {
-          const idx = lineStr.indexOf('[M');
-          if (col >= idx && col <= idx + 17) {
-            sendTerminalKey('m');
-            return;
-          }
-        }
-        if (lineStr.includes('[Q: Quit]')) {
-          const idx = lineStr.indexOf('[Q: Quit]');
-          if (col >= idx && col <= idx + 9) {
-            sendTerminalKey('q');
-            return;
-          }
-        }
-      }
-
-      // Line 3: Toolbar (Window options & Sort modes)
-      if (row === 3 && lineStr.includes('Window:')) {
-        // Window options: 1 to 7
-        const winMatches = [
-          { key: '1', pattern: '[1:10m]' },
-          { key: '2', pattern: '[2:1h]' },
-          { key: '3', pattern: '[3:6h]' },
-          { key: '4', pattern: '[4:24h]' },
-          { key: '5', pattern: '[5:7d]' },
-          { key: '6', pattern: '[6:30d]' },
-          { key: '7', pattern: '[7:custom]' }
-        ];
-        for (const w of winMatches) {
-          const idx = lineStr.indexOf(w.pattern);
-          if (idx !== -1 && col >= idx && col < idx + w.pattern.length) {
-            sendTerminalKey(w.key);
-            return;
-          }
-        }
-
-        // Sort options
-        const sortMatches = [
-          { key: 'g', pattern: '[G]rowth' },
-          { key: 'r', pattern: '[R]ate' },
-          { key: 's', pattern: '[S]ize' },
-          { key: 'n', pattern: '[N]ame' }
-        ];
-        for (const s of sortMatches) {
-          const idx = lineStr.indexOf(s.pattern);
-          if (idx !== -1 && col >= idx && col < idx + s.pattern.length) {
-            sendTerminalKey(s.key);
-            return;
-          }
-        }
-      }
-
-      // Directory Table Rows (Lines 7 onwards, before separator/footer)
-      if (row >= 7 && row < term.rows - 2) {
-        if (lineStr.trim().length === 0 || lineStr.includes('No subdirectories') || lineStr.startsWith('───') || lineStr.startsWith('───')) {
+    // Native xterm.js LinkProvider for pixel-perfect left clicks & hover cursor
+    term.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const buffer = term.buffer.active;
+        // bufferLineNumber is 1-based, getLine takes 0-based
+        const line = buffer.getLine(bufferLineNumber - 1);
+        if (!line) {
+          callback(undefined);
           return;
         }
 
-        // Find currently selected row (starts with '> ')
-        let selectedRow = -1;
-        for (let r = 7; r < term.rows - 2; ++r) {
-          const l = buffer.getLine(r);
-          if (l) {
-            const s = l.translateToString(true);
-            if (s.startsWith('>') || s.startsWith(' >') || s.includes('> ')) {
-              selectedRow = r;
-              break;
+        const lineStr = line.translateToString(true);
+        if (!lineStr || lineStr.trim().length === 0) {
+          callback(undefined);
+          return;
+        }
+
+        const links = [];
+
+        // Helper to register a clickable zone (col is 1-based in range)
+        function addLink(startCol, endCol, text, onActivate) {
+          links.push({
+            range: {
+              start: { x: startCol, y: bufferLineNumber },
+              end: { x: endCol, y: bufferLineNumber }
+            },
+            text: text,
+            decorations: { underline: false, pointerCursor: true },
+            activate(e, text) {
+              onActivate();
+            }
+          });
+        }
+
+        const rowIdx = bufferLineNumber - 1;
+
+        // Line 0: Header shortcuts ([M/F2: Settings], [Q: Quit])
+        if (rowIdx === 0) {
+          const settingsPatterns = ['[M/F2: Settings]', '[M: Settings]'];
+          for (const sp of settingsPatterns) {
+            const idx = lineStr.indexOf(sp);
+            if (idx !== -1) {
+              addLink(idx + 1, idx + sp.length, sp, () => sendTerminalKey('m'));
+            }
+          }
+          const qIdx = lineStr.indexOf('[Q: Quit]');
+          if (qIdx !== -1) {
+            addLink(qIdx + 1, qIdx + 9, '[Q: Quit]', () => sendTerminalKey('q'));
+          }
+        }
+
+        // Line 3: Toolbar (Window options & Sort modes)
+        if (rowIdx === 3 && lineStr.includes('Window:')) {
+          const winMatches = [
+            { key: '1', pattern: '[1:10m]' },
+            { key: '2', pattern: '[2:1h]' },
+            { key: '3', pattern: '[3:6h]' },
+            { key: '4', pattern: '[4:24h]' },
+            { key: '5', pattern: '[5:7d]' },
+            { key: '6', pattern: '[6:30d]' },
+            { key: '7', pattern: '[7:custom]' }
+          ];
+          for (const w of winMatches) {
+            const idx = lineStr.indexOf(w.pattern);
+            if (idx !== -1) {
+              addLink(idx + 1, idx + w.pattern.length, w.pattern, () => sendTerminalKey(w.key));
+            }
+          }
+
+          const sortMatches = [
+            { key: 'g', pattern: '[G]rowth' },
+            { key: 'r', pattern: '[R]ate' },
+            { key: 's', pattern: '[S]ize' },
+            { key: 'n', pattern: '[N]ame' }
+          ];
+          for (const s of sortMatches) {
+            const idx = lineStr.indexOf(s.pattern);
+            if (idx !== -1) {
+              addLink(idx + 1, idx + s.pattern.length, s.pattern, () => sendTerminalKey(s.key));
             }
           }
         }
 
-        if (selectedRow !== -1) {
-          const delta = row - selectedRow;
-          let arrowKeys = '';
-          if (delta > 0) {
-            arrowKeys = '\x1b[B'.repeat(delta); // Down arrows
-          } else if (delta < 0) {
-            arrowKeys = '\x1b[A'.repeat(-delta); // Up arrows
+        // Directory Table Rows (Lines 7 to rows - 3)
+        if (rowIdx >= 7 && rowIdx < term.rows - 2) {
+          const isSeparator = lineStr.startsWith('───') || lineStr.startsWith('───') || lineStr.includes('No subdirectories');
+          if (!isSeparator && lineStr.trim().length > 0) {
+            addLink(1, term.cols, lineStr, () => {
+              // Find the currently selected row (starts with '> ')
+              let selectedRow = -1;
+              for (let r = 7; r < term.rows - 2; ++r) {
+                const l = buffer.getLine(r);
+                if (l) {
+                  const s = l.translateToString(true);
+                  if (s.startsWith('>') || s.startsWith(' >') || s.includes('> ')) {
+                    selectedRow = r;
+                    break;
+                  }
+                }
+              }
+
+              if (selectedRow !== -1) {
+                const delta = rowIdx - selectedRow;
+                let arrowKeys = '';
+                if (delta > 0) {
+                  arrowKeys = '\x1b[B'.repeat(delta); // Down
+                } else if (delta < 0) {
+                  arrowKeys = '\x1b[A'.repeat(-delta); // Up
+                }
+                sendTerminalKey(arrowKeys + '\r');
+              } else {
+                sendTerminalKey('\r');
+              }
+            });
           }
-          // Move cursor and drill down with Enter (\r)
-          sendTerminalKey(arrowKeys + '\r');
-        } else {
-          // Fallback if marker not spotted: send Enter
-          sendTerminalKey('\r');
         }
+
+        callback(links);
       }
     });
 
