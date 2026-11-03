@@ -286,6 +286,7 @@
           const s = l.translateToString(true);
           if (s.includes('Custom Snapshot Comparison')) return 'custom';
           if (s.includes('Daemon Control & Configuration')) return 'settings';
+          if (s.includes('Top 10 Largest Files')) return 'top10';
         }
       }
       return null;
@@ -470,6 +471,29 @@
         }
 
         // =====================================================================
+        // MODAL 3: Top 10 Largest Files (Live Scan)
+        // =====================================================================
+        if (activeModal === 'top10') {
+          // Rescan button: [R] Rescan
+          if (lineStr.includes('Rescan') || lineStr.includes('[R]')) {
+            const idx = lineStr.indexOf('Rescan');
+            const startX = Math.max(0, lineStr.lastIndexOf('[', idx));
+            addLink(startX + 1, idx + 8, '[R] Rescan', () => sendTerminalKey('r'));
+          }
+
+          // Close button: [C/ESC] Close
+          if (lineStr.includes('Close') || lineStr.includes('[C/ESC]')) {
+            const idx = lineStr.indexOf('Close');
+            const startX = Math.max(0, lineStr.lastIndexOf('[', idx));
+            const endX = lineStr.indexOf(']', idx) !== -1 ? lineStr.indexOf(']', idx) + 1 : idx + 6;
+            addLink(startX + 1, endX, lineStr.substring(startX, endX), () => sendTerminalKey('\x1b'));
+          }
+
+          callback(links);
+          return;
+        }
+
+        // =====================================================================
         // NORMAL MAIN EXPLORER VIEW (No modal active)
         // =====================================================================
 
@@ -485,6 +509,18 @@
           const qIdx = lineStr.indexOf('[Q: Quit]');
           if (qIdx !== -1) {
             addLink(qIdx + 1, qIdx + 9, '[Q: Quit]', () => sendTerminalKey('q'));
+          }
+        }
+
+        // Line 2: Breadcrumb / Path row with [T: Top 10 live]
+        if (rowIdx === 2 || lineStr.includes('Path:')) {
+          const top10Patterns = ['[T: Top 10 live]', '[Top 10 live]', '[T]'];
+          for (const tp of top10Patterns) {
+            const idx = lineStr.indexOf(tp);
+            if (idx !== -1) {
+              addLink(idx + 1, idx + tp.length, tp, () => sendTerminalKey('t'));
+              break;
+            }
           }
         }
 

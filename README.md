@@ -203,10 +203,11 @@ grocycle tui
 ```
 
 ```
- GROCYCLE  Linux Directory Growth Explorer               [M/F2: Daemon Settings] [Q: Quit] 
+ GROCYCLE  1.0.5  Linux Directory Growth Explorer               [M/F2: Settings] [Q: Quit] 
 ───────────────────────────────────────────────────────────────────────────────────────────
-Path: /var/log
-Window: [1:10m] [2:1h] [3:6h] [4:24h] [5:7d] [6:30d]     Sort: [G]rowth | [R]ate | [S]ize | [N]ame
+Path: /var/log                                                            [T: Top 10 live]
+Window: [1:10m] [2:1h] [3:6h] [4:24h] [5:7d] [6:30d] [7:custom]       Sort: [G] [R] [S] [N]
+Range:  2026-11-03 09:00:00 (#12)  ->  2026-11-03 10:00:00 (#13)
 ───────────────────────────────────────────────────────────────────────────────────────────
   Directory Name                    Current Size    Growth (Δ)    Growth Rate     Relative 
 > journal/                              2.45 GiB    +350.2 MiB     350.2 MiB/h    [████████  ]
@@ -226,6 +227,7 @@ Viewing: /var/log | Snapshots: #12 -> #13 (4 entries)   Enter: Drilldown | Backs
 | `Backspace` / `Left` or `h` | **Go up** to parent directory |
 | `1` – `6` | Quick-switch time window (`10m`, `1h`, `6h`, `24h`, `7d`, `30d`) |
 | `7` / `C` | Open **Custom Snapshot Comparison** modal (`[7:custom]`) |
+| `T` / `t` | Open **Top 10 Live Files** modal (`[T: Top 10 live]`) |
 | `G` / `g` | Sort by **Absolute Growth Delta** (Default) |
 | `R` / `r` | Sort by **Growth Rate** (Bytes per hour) |
 | `S` / `s` | Sort by **Current Total Size** |
@@ -263,6 +265,20 @@ grocycle web -p 8080 --browser
 | `--max-clients <n>` | Maximum concurrent web terminal sessions (range: 1–50) | `5` |
 
 Each connected browser tab is assigned an isolated pseudoterminal (PTY) session, allowing multiple users or windows to explore storage metrics independently.
+
+### Web UI Mouse Support & Gestures
+
+The Web Terminal UI provides native, low-latency mouse interactions with visual pointer hover cursors:
+
+| Mouse Action | Target | Behavior |
+| :--- | :--- | :--- |
+| **Left Click** | **Directory Row** in Tree | **Select & Drill Down**: Instantly focuses the folder row and drills down (equivalent to `Enter`). |
+| **Right Click** | Anywhere in Explorer | **Navigate Back / Up**: Navigates back up to the parent directory level (equivalent to `Backspace`). |
+| **Left Click** | Toolbar & Header Buttons | Activates shortcuts directly: `[T: Top 10 live]`, `[M/F2: Settings]`, `[1:10m]`–`[7:custom]`, Sorts `[G] [R] [S] [N]`, `[Q: Quit]`. |
+| **Left Click** | Modal Dialog Buttons | Clicks `[A] Apply Comparison`, `[C/ESC] Cancel` / `Close`, and `[R] Rescan` directly. |
+| **Left Click** | Snapshot Rows (`[7:custom]`) | Selects specific historical scan baseline or target deterministically. |
+| **Mouse Wheel** | Snapshot Lists (`[7:custom]`) | Smoothly scrolls the Start or End snapshot list up or down under cursor. |
+| **Right Click** | Open Modal Dialog | **Dismiss / Close**: Instantly closes the active popup dialog and returns to the explorer. |
 
 ---
 

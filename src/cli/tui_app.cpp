@@ -19,6 +19,9 @@
 #include <atomic>
 #include <cstdio>
 #include <climits>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 using namespace ftxui;
 
@@ -69,6 +72,65 @@ int launch_tui(const Config &cfg) {
     int scroll_offset = 0; // Viewport top index
     bool show_settings_modal = false;
     bool show_custom_modal = false;
+    bool show_top10_modal = false;
+
+    // Top 10 files live scan state
+    struct FileEntry {
+        std::string filename;
+        uint64_t size;
+        int64_t mtime;
+    };
+    std::string top10_target_path = "";
+    bool top10_path_exists = true;
+    std::string top10_error_msg = "";
+    std::vector<FileEntry> top10_files;
+
+    auto scan_top10_live_files = [&]() {
+        top10_target_path = path_name_stack.empty() ? "/" : path_name_stack.back();
+        top10_files.clear();
+        top10_error_msg.clear();
+        top10_path_exists = true;
+
+        std::error_code ec;
+        if (!fs::exists(top10_target_path, ec) || !fs::is_directory(top10_target_path, ec)) {
+            top10_path_exists = false;
+            top10_error_msg = "Directory does not exist on disk: " + top10_target_path;
+            return;
+        }
+
+        std::vector<FileEntry> all_files;
+        fs::directory_iterator dit(top10_target_path, fs::directory_options::skip_permission_denied, ec);
+        if (ec) {
+            top10_error_msg = "Cannot access directory (" + ec.message() + ")";
+            return;
+        }
+
+        for (const auto &entry : dit) {
+            std::error_code fec;
+            if (entry.is_regular_file(fec)) {
+                uint64_t sz = entry.file_size(fec);
+                if (!fec) {
+                    auto ftime = entry.last_write_time(fec);
+                    int64_t mtime = 0;
+                    if (!fec) {
+                        auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                            ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
+                        mtime = std::chrono::duration_cast<std::chrono::seconds>(sctp.time_since_epoch()).count();
+                    }
+                    all_files.push_back({entry.path().filename().string(), sz, mtime});
+                }
+            }
+        }
+
+        std::sort(all_files.begin(), all_files.end(), [](const FileEntry &a, const FileEntry &b) {
+            return a.size > b.size;
+        });
+
+        if (all_files.size() > 10) {
+            all_files.resize(10);
+        }
+        top10_files = std::move(all_files);
+    };
 
     // Custom snapshot comparison state
     int64_t custom_start_snap_id = -1;
@@ -281,9 +343,10 @@ int launch_tui(const Config &cfg) {
                   text(ver_badge) | bold | color(Color::YellowLight), text("Linux Directory Growth Explorer ") | dim,
                   filler(), text("[M/F2: Settings] [Q: Quit] ") | color(Color::Cyan)});
 
-        // Path Breadcrumb
+        // Path Breadcrumb with right-aligned [T: Top 10 live] button
         auto breadcrumbs =
-            hbox({text("Path: ") | bold, text(path_name_stack.back()) | color(Color::YellowLight) | bold});
+            hbox({text("Path: ") | bold, text(path_name_stack.back()) | color(Color::YellowLight) | bold, filler(),
+                  text("[T: Top 10 live]") | bold | color(Color::Cyan)});
 
         // Window selector tabs
         Elements win_tabs;
@@ -681,10 +744,91 @@ int launch_tui(const Config &cfg) {
                color(Color::White) | borderHeavy | color(Color::Cyan) | clear_under;
     });
 
-    auto root_with_modal = Modal(main_renderer, custom_modal_renderer, &show_custom_modal);
+    auto top10_modal_renderer = Renderer([&] {
+        Elements modal_els;
+        modal_els.push_back(text(" Top 10 Largest Files (Live Scan) ") | bold | center | color(Color::Cyan));
+        modal_els.push_back(separator());
+
+        std::string disp_target = top10_target_path;
+        if (disp_target.length() > 58) {
+            disp_target = "..." + disp_target.substr(disp_target.length() - 55);
+        }
+        modal_els.push_back(hbox({text("Directory: ") | bold, text(disp_target) | color(Color::YellowLight) | bold}));
+        modal_els.push_back(separator());
+
+        if (!top10_path_exists || !top10_error_msg.empty()) {
+            modal_els.push_back(text(""));
+            modal_els.push_back(text("  ⚠️  " + top10_error_msg) | bold | color(Color::RedLight));
+            modal_els.push_back(text(""));
+            modal_els.push_back(separator());
+            modal_els.push_back(hbox({filler(), text("[ [C/ESC] Close ]") | bold, filler()}));
+            modal_els.push_back(separator());
+            modal_els.push_back(text("Press [ESC] or [C] or Click Close to return.") | dim | center);
+        } else if (top10_files.empty()) {
+            modal_els.push_back(text(""));
+            modal_els.push_back(text("  (No regular files found directly in this directory)") | dim | center);
+            modal_els.push_back(text(""));
+            modal_els.push_back(separator());
+            modal_els.push_back(hbox({filler(), text("[ [C/ESC] Close ]") | bold, filler()}));
+            modal_els.push_back(separator());
+            modal_els.push_back(text("Press [ESC] or [C] or Click Close to return.") | dim | center);
+        } else {
+            // Header for top 10 files table
+            modal_els.push_back(hbox({text(" #   File Name") | bold | flex,
+                                      text("Size") | bold | size(WIDTH, EQUAL, 12),
+                                      text("Modified") | bold | size(WIDTH, EQUAL, 20)}) |
+                                bgcolor(Color::BlueLight) | color(Color::Black));
+
+            for (size_t i = 0; i < top10_files.size(); ++i) {
+                const auto &f = top10_files[i];
+                std::string rank_str = "#" + std::to_string(i + 1) + " ";
+                if (i < 9)
+                    rank_str = " #" + std::to_string(i + 1) + " ";
+
+                std::string fn = f.filename;
+                if (fn.length() > 36) {
+                    fn = fn.substr(0, 33) + "...";
+                }
+
+                std::string mtime_str = f.mtime > 0 ? utils::format_timestamp(f.mtime) : "N/A";
+                auto row = hbox({text(rank_str) | color(Color::YellowLight), text(fn) | bold | flex,
+                                 text(utils::format_bytes(f.size)) | color(Color::GreenLight) | bold |
+                                     size(WIDTH, EQUAL, 12),
+                                 text(mtime_str) | dim | size(WIDTH, EQUAL, 20)});
+                if (i % 2 == 1) {
+                    row = row | bgcolor(Color::RGB(28, 28, 34));
+                }
+                modal_els.push_back(row);
+            }
+
+            modal_els.push_back(separator());
+            modal_els.push_back(hbox({filler(), text("[ [R] Rescan ]") | bold | color(Color::Cyan), text("     "),
+                                      text("[ [C/ESC] Close ]") | bold, filler()}));
+            modal_els.push_back(separator());
+            modal_els.push_back(text("Press [ESC] or [C] or Click Close to return to explorer.") | dim | center);
+        }
+
+        return vbox(std::move(modal_els)) | size(WIDTH, EQUAL, 74) | bgcolor(Color::RGB(20, 20, 24)) |
+               color(Color::White) | borderHeavy | color(Color::Cyan) | clear_under;
+    });
+
+    auto root_with_custom_modal = Modal(main_renderer, custom_modal_renderer, &show_custom_modal);
+    auto root_with_modal = Modal(root_with_custom_modal, top10_modal_renderer, &show_top10_modal);
 
     // Wrap with CatchEvent decorator
     auto component = CatchEvent(root_with_modal, [&](Event event) {
+        if (show_top10_modal) {
+            if (event == Event::Escape || event == Event::Character('c') || event == Event::Character('C') ||
+                event == Event::Character('q') || event == Event::Character('t') || event == Event::Character('T')) {
+                show_top10_modal = false;
+                return true;
+            }
+            if (event == Event::Character('r') || event == Event::Character('R')) {
+                scan_top10_live_files();
+                return true;
+            }
+            return true; // Swallow everything else while Top 10 modal is open
+        }
         if (show_custom_modal) {
             // Private web UI mouse sequence: ESC [ 77 ; <list> ; <arg> z
             const std::string &in = event.input();
@@ -847,6 +991,13 @@ int launch_tui(const Config &cfg) {
             modal_focus = 0;
             normalize_modal_selection();
             show_custom_modal = true;
+            return true;
+        }
+
+        // Top 10 live files dialog hotkey
+        if (event == Event::Character('t') || event == Event::Character('T')) {
+            scan_top10_live_files();
+            show_top10_modal = true;
             return true;
         }
 
