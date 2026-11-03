@@ -291,6 +291,41 @@
       return null;
     }
 
+    // Wheel event handler: scroll lists when custom modal is open
+    container.addEventListener('wheel', (e) => {
+      const modal = getActiveModalType();
+      if (modal === 'custom') {
+        e.preventDefault();
+        // Determine whether mouse is over Start or End list by terminal row
+        const rect = container.getBoundingClientRect();
+        const clientY = e.clientY - rect.top;
+        const totalRows = term.rows;
+        const rowHeight = rect.height / totalRows;
+        const mouseRow = Math.floor(clientY / rowHeight);
+
+        // Find Start and End header lines in buffer
+        const buffer = term.buffer.active;
+        let startHeaderRow = -1;
+        let endHeaderRow = -1;
+        for (let r = 0; r < totalRows; ++r) {
+          const l = buffer.getLine(r);
+          if (l) {
+            const s = l.translateToString(true);
+            if (s.includes('Start Scan')) startHeaderRow = r;
+            if (s.includes('End Scan')) endHeaderRow = r;
+          }
+        }
+
+        let targetList = 0; // 0 = Start, 1 = End
+        if (endHeaderRow !== -1 && mouseRow >= endHeaderRow) {
+          targetList = 1;
+        }
+
+        const scrollArg = e.deltaY < 0 ? 100 : 101; // 100 = Up, 101 = Down
+        sendTerminalKey(`\x1b[77;${targetList};${scrollArg}z`);
+      }
+    }, { passive: false });
+
     // Right-click: Close modal if open; otherwise Navigate Up / Back (Backspace)
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -340,13 +375,12 @@
         const activeModal = getActiveModalType();
 
         // =====================================================================
-        // MODAL 1: Custom Snapshot Comparison
+        // MODAL 1: Custom Snapshot Comparison (Stacked Fixed-Height Lists)
         // =====================================================================
         if (activeModal === 'custom') {
           // 1. Apply Comparison Button: [A] Apply Comparison
           const applyIdx = lineStr.indexOf('Apply Comparison');
           if (applyIdx !== -1) {
-            // Find boundaries of button label
             const startX = Math.max(0, lineStr.lastIndexOf('[', applyIdx));
             const endX = lineStr.indexOf(']', applyIdx) !== -1 ? lineStr.indexOf(']', applyIdx) + 1 : applyIdx + 16;
             addLink(startX + 1, endX, lineStr.substring(startX, endX), () => sendTerminalKey('a'));
@@ -360,44 +394,53 @@
             addLink(startX + 1, endX, lineStr.substring(startX, endX), () => sendTerminalKey('\x1b'));
           }
 
-          // 3. Dropdown Header Boxes (Start Scan / End Scan)
-          // Lines with '↓ #' or '→ #' or '↓   ' or dropdown closed box
-          if (lineStr.includes('↓ #') || lineStr.includes('→ #') || lineStr.includes('↓ [') || lineStr.includes('→ [')) {
-            addLink(1, term.cols, lineStr, () => {
-              // Toggle dropdown by sending Enter
-              sendTerminalKey('\r');
+          // Determine list context (0 = Start, 1 = End) by checking End Scan header line position
+          let endHeaderRow = -1;
+          for (let r = 0; r < term.rows; ++r) {
+            const l = buffer.getLine(r);
+            if (l && l.translateToString(true).includes('End Scan')) {
+              endHeaderRow = r;
+              break;
+            }
+          }
+          const listIdx = (endHeaderRow !== -1 && rowIdx >= endHeaderRow) ? 1 : 0;
+
+          // 3. Up Scroll Button: [▲ Up]
+          if (lineStr.includes('[▲ Up]')) {
+            const upIdx = lineStr.indexOf('[▲ Up]');
+            addLink(upIdx + 1, upIdx + 6, '[▲ Up]', () => {
+              sendTerminalKey(`\x1b[77;${listIdx};100z`);
             });
           }
 
-          // 4. Dropdown List Items: e.g. "o #3 - 2026-11-02..." or "• #4..." or "* #4..."
-          if (lineStr.includes('#') && (lineStr.includes('o #') || lineStr.includes('• #') || lineStr.includes('O #') || lineStr.includes('● #') || lineStr.includes('(*)') || lineStr.includes('( )'))) {
-            addLink(1, term.cols, lineStr, () => {
-              // Find the currently selected option in the list
-              let focusedRow = -1;
-              for (let r = 0; r < term.rows; ++r) {
-                const l = buffer.getLine(r);
-                if (l) {
-                  const s = l.translateToString(true);
-                  if (s.includes('● #') || s.includes('• #') || s.includes('(*)')) {
-                    focusedRow = r;
-                    break;
-                  }
-                }
-              }
-
-              if (focusedRow !== -1) {
-                const delta = rowIdx - focusedRow;
-                let arrowKeys = '';
-                if (delta > 0) {
-                  arrowKeys = '\x1b[B'.repeat(delta); // Down
-                } else if (delta < 0) {
-                  arrowKeys = '\x1b[A'.repeat(-delta); // Up
-                }
-                sendTerminalKey(arrowKeys + '\r');
-              } else {
-                sendTerminalKey('\r');
-              }
+          // 4. Down Scroll Button: [▼ Down]
+          if (lineStr.includes('[▼ Down]')) {
+            const downIdx = lineStr.indexOf('[▼ Down]');
+            addLink(downIdx + 1, downIdx + 8, '[▼ Down]', () => {
+              sendTerminalKey(`\x1b[77;${listIdx};101z`);
             });
+          }
+
+          // 5. Scan items in the 5 visible rows: matches line with "#<id> — <date>"
+          if (lineStr.includes('—') && (lineStr.includes('#') || lineStr.includes('▶ #'))) {
+            // Find which visible row (0..4) this is relative to the [▲ Up] button above it
+            let upRow = -1;
+            for (let r = rowIdx - 1; r >= 0 && r >= rowIdx - 6; --r) {
+              const l = buffer.getLine(r);
+              if (l && l.translateToString(true).includes('[▲ Up]')) {
+                upRow = r;
+                break;
+              }
+            }
+
+            if (upRow !== -1) {
+              const visibleRowArg = rowIdx - upRow - 1; // 0..4
+              if (visibleRowArg >= 0 && visibleRowArg < 5) {
+                addLink(1, term.cols, lineStr, () => {
+                  sendTerminalKey(`\x1b[77;${listIdx};${visibleRowArg}z`);
+                });
+              }
+            }
           }
 
           callback(links);
