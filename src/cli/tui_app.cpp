@@ -122,9 +122,8 @@ int launch_tui(const Config &cfg) {
             }
         }
 
-        std::sort(all_files.begin(), all_files.end(), [](const FileEntry &a, const FileEntry &b) {
-            return a.size > b.size;
-        });
+        std::sort(all_files.begin(), all_files.end(),
+                  [](const FileEntry &a, const FileEntry &b) { return a.size > b.size; });
 
         if (all_files.size() > 10) {
             all_files.resize(10);
@@ -344,9 +343,8 @@ int launch_tui(const Config &cfg) {
                   filler(), text("[M/F2: Settings] [Q: Quit] ") | color(Color::Cyan)});
 
         // Path Breadcrumb with right-aligned [T: Top 10 live] button
-        auto breadcrumbs =
-            hbox({text("Path: ") | bold, text(path_name_stack.back()) | color(Color::YellowLight) | bold, filler(),
-                  text("[T: Top 10 live]") | bold | color(Color::Cyan)});
+        auto breadcrumbs = hbox({text("Path: ") | bold, text(path_name_stack.back()) | color(Color::YellowLight) | bold,
+                                 filler(), text("[T: Top 10 live]") | bold | color(Color::Cyan)});
 
         // Window selector tabs
         Elements win_tabs;
@@ -774,10 +772,10 @@ int launch_tui(const Config &cfg) {
             modal_els.push_back(text("Press [ESC] or [C] or Click Close to return.") | dim | center);
         } else {
             // Header for top 10 files table
-            modal_els.push_back(hbox({text(" #   File Name") | bold | flex,
-                                      text("Size") | bold | size(WIDTH, EQUAL, 12),
-                                      text("Modified") | bold | size(WIDTH, EQUAL, 20)}) |
-                                bgcolor(Color::BlueLight) | color(Color::Black));
+            modal_els.push_back(
+                hbox({text(" #   File Name") | bold | flex, text("Size") | bold | size(WIDTH, EQUAL, 12),
+                      text("Modified") | bold | size(WIDTH, EQUAL, 20)}) |
+                bgcolor(Color::BlueLight) | color(Color::Black));
 
             for (size_t i = 0; i < top10_files.size(); ++i) {
                 const auto &f = top10_files[i];
@@ -791,10 +789,10 @@ int launch_tui(const Config &cfg) {
                 }
 
                 std::string mtime_str = f.mtime > 0 ? utils::format_timestamp(f.mtime) : "N/A";
-                auto row = hbox({text(rank_str) | color(Color::YellowLight), text(fn) | bold | flex,
-                                 text(utils::format_bytes(f.size)) | color(Color::GreenLight) | bold |
-                                     size(WIDTH, EQUAL, 12),
-                                 text(mtime_str) | dim | size(WIDTH, EQUAL, 20)});
+                auto row =
+                    hbox({text(rank_str) | color(Color::YellowLight), text(fn) | bold | flex,
+                          text(utils::format_bytes(f.size)) | color(Color::GreenLight) | bold | size(WIDTH, EQUAL, 12),
+                          text(mtime_str) | dim | size(WIDTH, EQUAL, 20)});
                 if (i % 2 == 1) {
                     row = row | bgcolor(Color::RGB(28, 28, 34));
                 }
